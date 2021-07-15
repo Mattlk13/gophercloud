@@ -3,6 +3,7 @@ package testing
 import (
 	"fmt"
 	"net/http"
+	"net/url"
 	"testing"
 
 	fake "github.com/gophercloud/gophercloud/openstack/networking/v2/common"
@@ -93,6 +94,7 @@ func TestListWithExtensions(t *testing.T) {
 	th.AssertNoErr(t, err)
 
 	err = ports.ExtractPortsInto(allPages, &allPorts)
+	th.AssertNoErr(t, err)
 
 	th.AssertEquals(t, allPorts[0].Status, "ACTIVE")
 	th.AssertEquals(t, allPorts[0].PortSecurityEnabled, false)
@@ -782,4 +784,20 @@ func TestUpdateWithExtraDHCPOpts(t *testing.T) {
 	th.AssertDeepEquals(t, s.ExtraDHCPOpts[0].OptName, "option2")
 	th.AssertDeepEquals(t, s.ExtraDHCPOpts[0].OptValue, "value2")
 	th.AssertDeepEquals(t, s.ExtraDHCPOpts[0].IPVersion, 4)
+}
+
+func TestPortsListOpts(t *testing.T) {
+	for expected, opts := range map[string]ports.ListOpts{
+		newValue("fixed_ips", `ip_address=1.2.3.4,subnet_id=42`): {
+			FixedIPs: []ports.FixedIPOpts{{IPAddress: "1.2.3.4", SubnetID: "42"}},
+		},
+	} {
+		actual, _ := opts.ToPortListQuery()
+		th.AssertEquals(t, expected, actual)
+	}
+}
+func newValue(param, value string) string {
+	v := url.Values{}
+	v.Add(param, value)
+	return "?" + v.Encode()
 }

@@ -15,7 +15,7 @@ func TestListServicesPre253(t *testing.T) {
 	HandleListPre253Successfully(t)
 
 	pages := 0
-	err := services.List(client.ServiceClient()).EachPage(func(page pagination.Page) (bool, error) {
+	err := services.List(client.ServiceClient(), nil).EachPage(func(page pagination.Page) (bool, error) {
 		pages++
 
 		actual, err := services.ExtractServices(page)
@@ -47,7 +47,11 @@ func TestListServices(t *testing.T) {
 	HandleListSuccessfully(t)
 
 	pages := 0
-	err := services.List(client.ServiceClient()).EachPage(func(page pagination.Page) (bool, error) {
+	opts := services.ListOpts{
+		Binary: "fake-binary",
+		Host:   "host123",
+	}
+	err := services.List(client.ServiceClient(), opts).EachPage(func(page pagination.Page) (bool, error) {
 		pages++
 
 		actual, err := services.ExtractServices(page)
@@ -71,4 +75,18 @@ func TestListServices(t *testing.T) {
 	if pages != 1 {
 		t.Errorf("Expected 1 page, saw %d", pages)
 	}
+}
+
+func TestUpdateService(t *testing.T) {
+	testhelper.SetupHTTP()
+	defer testhelper.TeardownHTTP()
+	HandleUpdateSuccessfully(t)
+
+	client := client.ServiceClient()
+	actual, err := services.Update(client, "fake-service-id", services.UpdateOpts{Status: services.ServiceDisabled}).Extract()
+	if err != nil {
+		t.Fatalf("Unexpected Update error: %v", err)
+	}
+
+	testhelper.CheckDeepEquals(t, FakeServiceUpdateBody, *actual)
 }

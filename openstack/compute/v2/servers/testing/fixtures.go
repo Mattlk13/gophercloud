@@ -78,7 +78,11 @@ const ServerListBody = `
 			"created": "2014-09-25T13:10:02Z",
 			"tenant_id": "fcad67a6189847c4aecfa3c81a05783b",
 			"OS-DCF:diskConfig": "MANUAL",
-			"os-extended-volumes:volumes_attached": [],
+			"os-extended-volumes:volumes_attached": [
+				{
+					"id": "2bdbc40f-a277-45d4-94ac-d9881c777d33"
+				}
+			],
 			"accessIPv4": "",
 			"accessIPv6": "",
 			"progress": 0,
@@ -530,8 +534,13 @@ var (
 		Created:  herpTimeCreated,
 		TenantID: "fcad67a6189847c4aecfa3c81a05783b",
 		Metadata: map[string]string{},
+		AttachedVolumes: []servers.AttachedVolume{
+			{
+				ID: "2bdbc40f-a277-45d4-94ac-d9881c777d33",
+			},
+		},
 		SecurityGroups: []map[string]interface{}{
-			map[string]interface{}{
+			{
 				"name": "default",
 			},
 		},
@@ -582,14 +591,15 @@ var (
 				},
 			},
 		},
-		ID:       "9e5476bd-a4ec-4653-93d6-72c93aa682ba",
-		UserID:   "9349aff8be7545ac9d2f1d00999a23cd",
-		Name:     "derp",
-		Created:  derpTimeCreated,
-		TenantID: "fcad67a6189847c4aecfa3c81a05783b",
-		Metadata: map[string]string{},
+		ID:              "9e5476bd-a4ec-4653-93d6-72c93aa682ba",
+		UserID:          "9349aff8be7545ac9d2f1d00999a23cd",
+		Name:            "derp",
+		Created:         derpTimeCreated,
+		TenantID:        "fcad67a6189847c4aecfa3c81a05783b",
+		Metadata:        map[string]string{},
+		AttachedVolumes: []servers.AttachedVolume{},
 		SecurityGroups: []map[string]interface{}{
-			map[string]interface{}{
+			{
 				"name": "default",
 			},
 		},
@@ -634,14 +644,15 @@ var (
 				},
 			},
 		},
-		ID:       "9e5476bd-a4ec-4653-93d6-72c93aa682bb",
-		UserID:   "9349aff8be7545ac9d2f1d00999a23cd",
-		Name:     "merp",
-		Created:  merpTimeCreated,
-		TenantID: "fcad67a6189847c4aecfa3c81a05783b",
-		Metadata: map[string]string{},
+		ID:              "9e5476bd-a4ec-4653-93d6-72c93aa682bb",
+		UserID:          "9349aff8be7545ac9d2f1d00999a23cd",
+		Name:            "merp",
+		Created:         merpTimeCreated,
+		TenantID:        "fcad67a6189847c4aecfa3c81a05783b",
+		Metadata:        map[string]string{},
+		AttachedVolumes: []servers.AttachedVolume{},
 		SecurityGroups: []map[string]interface{}{
-			map[string]interface{}{
+			{
 				"name": "default",
 			},
 		},
@@ -664,6 +675,27 @@ type CreateOptsWithCustomField struct {
 
 func (opts CreateOptsWithCustomField) ToServerCreateMap() (map[string]interface{}, error) {
 	return gophercloud.BuildRequestBody(opts, "server")
+}
+
+// HandleServerNoNetworkCreationSuccessfully sets up the test server with no
+// network to respond to a server creation request with a given response.
+func HandleServerNoNetworkCreationSuccessfully(t *testing.T, response string) {
+	th.Mux.HandleFunc("/servers", func(w http.ResponseWriter, r *http.Request) {
+		th.TestMethod(t, r, "POST")
+		th.TestHeader(t, r, "X-Auth-Token", client.TokenID)
+		th.TestJSONRequest(t, r, `{
+			"server": {
+				"name": "derp",
+				"imageRef": "f90f6034-2570-4974-8351-6b49732ef2eb",
+				"flavorRef": "1",
+				"networks": "none"
+			}
+		}`)
+
+		w.WriteHeader(http.StatusAccepted)
+		w.Header().Add("Content-Type", "application/json")
+		fmt.Fprintf(w, response)
+	})
 }
 
 // HandleServerCreationSuccessfully sets up the test server to respond to a server creation request
@@ -985,7 +1017,7 @@ func HandleRebuildSuccessfully(t *testing.T, response string) {
 				"rebuild": {
 					"name": "new-name",
 					"adminPass": "swordfish",
-					"imageRef": "http://104.130.131.164:8774/fcad67a6189847c4aecfa3c81a05783b/images/f90f6034-2570-4974-8351-6b49732ef2eb",
+					"imageRef": "f90f6034-2570-4974-8351-6b49732ef2eb",
 					"accessIPv4": "1.2.3.4"
 				}
 			}
@@ -1087,7 +1119,7 @@ func HandleMetadataUpdateSuccessfully(t *testing.T) {
 
 // ListAddressesExpected represents an expected repsonse from a ListAddresses request.
 var ListAddressesExpected = map[string][]servers.Address{
-	"public": []servers.Address{
+	"public": {
 		{
 			Version: 4,
 			Address: "50.56.176.35",
@@ -1097,7 +1129,7 @@ var ListAddressesExpected = map[string][]servers.Address{
 			Address: "2001:4800:790e:510:be76:4eff:fe04:84a8",
 		},
 	},
-	"private": []servers.Address{
+	"private": {
 		{
 			Version: 4,
 			Address: "10.180.3.155",

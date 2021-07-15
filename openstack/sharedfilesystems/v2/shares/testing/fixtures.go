@@ -53,6 +53,7 @@ var createResponse = `{
 			"replication_type": null,
 			"task_state": null,
 			"snapshot_support": true,
+			"create_share_from_snapshot_support": true,
 			"consistency_group_id": "9397c191-8427-4661-a2e8-b23820dc01d4",
 			"source_cgsnapshot_member_id": null,
 			"volume_type": "default",
@@ -133,6 +134,7 @@ var updateResponse = `
 		"task_state": null,
 		"is_public": false,
 		"snapshot_support": true,
+		"create_share_from_snapshot_support": true,
 		"name": "my_new_test_share",
 		"created_at": "2015-09-18T10:25:24.000000",
 		"share_proto": "NFS",
@@ -188,6 +190,7 @@ var getResponse = `{
         "task_state": null,
         "is_public": true,
         "snapshot_support": true,
+        "create_share_from_snapshot_support": true,
         "name": "my_test_share",
         "created_at": "2015-09-18T10:25:24.000000",
         "share_proto": "NFS",
@@ -241,6 +244,7 @@ var listDetailResponse = `{
 		        "task_state": null,
 		        "is_public": true,
 		        "snapshot_support": true,
+		        "create_share_from_snapshot_support": true,
 		        "name": "my_test_share",
 		        "created_at": "2015-09-18T10:25:24.000000",
 		        "share_proto": "NFS",
@@ -273,7 +277,7 @@ func MockListDetailResponse(t *testing.T) {
 	})
 }
 
-var getExportLocationsResponse = `{
+var listExportLocationsResponse = `{
     "export_locations": [
         {
 		"path": "127.0.0.1:/var/lib/manila/mnt/share-9a922036-ad26-4d27-b955-7a1e285fa74d",
@@ -285,14 +289,35 @@ var getExportLocationsResponse = `{
     ]
 }`
 
-// MockGetExportLocationsResponse creates a mock get export locations response
-func MockGetExportLocationsResponse(t *testing.T) {
+// MockListExportLocationsResponse creates a mock get export locations response
+func MockListExportLocationsResponse(t *testing.T) {
 	th.Mux.HandleFunc(shareEndpoint+"/"+shareID+"/export_locations", func(w http.ResponseWriter, r *http.Request) {
 		th.TestMethod(t, r, "GET")
 		th.TestHeader(t, r, "X-Auth-Token", fake.TokenID)
 		w.Header().Add("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		fmt.Fprintf(w, getExportLocationsResponse)
+		fmt.Fprintf(w, listExportLocationsResponse)
+	})
+}
+
+var getExportLocationResponse = `{
+    "export_location": {
+	"path": "127.0.0.1:/var/lib/manila/mnt/share-9a922036-ad26-4d27-b955-7a1e285fa74d",
+	"share_instance_id": "011d21e2-fbc3-4e4a-9993-9ea223f73264",
+	"is_admin_only": false,
+	"id": "80ed63fc-83bc-4afc-b881-da4a345ac83d",
+	"preferred": false
+    }
+}`
+
+// MockGetExportLocationResponse creates a mock get export location response
+func MockGetExportLocationResponse(t *testing.T) {
+	th.Mux.HandleFunc(shareEndpoint+"/"+shareID+"/export_locations/80ed63fc-83bc-4afc-b881-da4a345ac83d", func(w http.ResponseWriter, r *http.Request) {
+		th.TestMethod(t, r, "GET")
+		th.TestHeader(t, r, "X-Auth-Token", fake.TokenID)
+		w.Header().Add("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprintf(w, getExportLocationResponse)
 	})
 }
 
@@ -507,17 +532,83 @@ func MockUpdateMetadataResponse(t *testing.T) {
 	})
 }
 
-var deleteMetadatumRequest = `{
-		"metadata": {
-			"foo": "bar"
-		}
-	}`
-
 // MockDeleteMetadatumResponse creates a mock unset metadata response
 func MockDeleteMetadatumResponse(t *testing.T, key string) {
 	th.Mux.HandleFunc(shareEndpoint+"/"+shareID+"/metadata/"+key, func(w http.ResponseWriter, r *http.Request) {
 		th.TestMethod(t, r, "DELETE")
 		th.TestHeader(t, r, "X-Auth-Token", fake.TokenID)
 		w.WriteHeader(http.StatusOK)
+	})
+}
+
+var revertRequest = `{
+		"revert": {
+			"snapshot_id": "ddeac769-9742-497f-b985-5bcfa94a3fd6"
+		}
+	}`
+
+// MockRevertResponse creates a mock revert share response
+func MockRevertResponse(t *testing.T) {
+	th.Mux.HandleFunc(shareEndpoint+"/"+shareID+"/action", func(w http.ResponseWriter, r *http.Request) {
+		th.TestMethod(t, r, "POST")
+		th.TestHeader(t, r, "X-Auth-Token", fake.TokenID)
+		th.TestHeader(t, r, "Content-Type", "application/json")
+		th.TestHeader(t, r, "Accept", "application/json")
+		th.TestJSONRequest(t, r, revertRequest)
+		w.Header().Add("Content-Type", "application/json")
+		w.WriteHeader(http.StatusAccepted)
+	})
+}
+
+var resetStatusRequest = `{
+		"reset_status": {
+			"status": "error"
+		}
+	}`
+
+// MockResetStatusResponse creates a mock reset status share response
+func MockResetStatusResponse(t *testing.T) {
+	th.Mux.HandleFunc(shareEndpoint+"/"+shareID+"/action", func(w http.ResponseWriter, r *http.Request) {
+		th.TestMethod(t, r, "POST")
+		th.TestHeader(t, r, "X-Auth-Token", fake.TokenID)
+		th.TestHeader(t, r, "Content-Type", "application/json")
+		th.TestHeader(t, r, "Accept", "application/json")
+		th.TestJSONRequest(t, r, resetStatusRequest)
+		w.Header().Add("Content-Type", "application/json")
+		w.WriteHeader(http.StatusAccepted)
+	})
+}
+
+var forceDeleteRequest = `{
+                "force_delete": null
+        }`
+
+// MockForceDeleteResponse creates a mock force delete share response
+func MockForceDeleteResponse(t *testing.T) {
+	th.Mux.HandleFunc(shareEndpoint+"/"+shareID+"/action", func(w http.ResponseWriter, r *http.Request) {
+		th.TestMethod(t, r, "POST")
+		th.TestHeader(t, r, "X-Auth-Token", fake.TokenID)
+		th.TestHeader(t, r, "Content-Type", "application/json")
+		th.TestHeader(t, r, "Accept", "application/json")
+		th.TestJSONRequest(t, r, forceDeleteRequest)
+		w.Header().Add("Content-Type", "application/json")
+		w.WriteHeader(http.StatusAccepted)
+	})
+}
+
+var unmanageRequest = `{
+                "unmanage": null
+        }`
+
+// MockUnmanageResponse creates a mock unmanage share response
+func MockUnmanageResponse(t *testing.T) {
+	th.Mux.HandleFunc(shareEndpoint+"/"+shareID+"/action", func(w http.ResponseWriter, r *http.Request) {
+		th.TestMethod(t, r, "POST")
+		th.TestHeader(t, r, "X-Auth-Token", fake.TokenID)
+		th.TestHeader(t, r, "Content-Type", "application/json")
+		th.TestHeader(t, r, "Accept", "application/json")
+		th.TestJSONRequest(t, r, unmanageRequest)
+		w.Header().Add("Content-Type", "application/json")
+		w.WriteHeader(http.StatusAccepted)
 	})
 }

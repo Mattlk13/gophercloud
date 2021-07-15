@@ -38,7 +38,7 @@ Example to Create a Trust
         },
         TrusteeUserID: "ecb37e88cc86431c99d0332208cb6fbf",
         TrustorUserID: "959ed913a32c4ec88c041c98e61cbbc3",
-	}
+    }
 
     trust, err := trusts.Create(identityClient, createOpts).Extract()
     if err != nil {
@@ -54,5 +54,33 @@ Example to Delete a Trust
     if err != nil {
         panic(err)
     }
+
+Example to Get a Trust
+
+    trustID := "3422b7c113894f5d90665e1a79655e23"
+    err := trusts.Get(identityClient, trustID).ExtractErr()
+    if err != nil {
+        panic(err)
+    }
+
+Example to List a Trust
+
+	listOpts := trusts.ListOpts{
+		TrustorUserId: "3422b7c113894f5d90665e1a79655e23",
+	}
+
+	allPages, err := trusts.List(identityClient, listOpts).AllPages()
+	if err != nil {
+		panic(err)
+	}
+
+	allTrusts, err := trusts.ExtractTrusts(allPages)
+	if err != nil {
+		panic(err)
+	}
+
+	for _, trust := range allTrusts {
+		fmt.Printf("%+v\n", region)
+	}
 */
 package trusts

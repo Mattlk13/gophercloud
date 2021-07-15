@@ -15,9 +15,6 @@ import (
 	th "github.com/gophercloud/gophercloud/testhelper"
 )
 
-const loadbalancerActiveTimeoutSeconds = 600
-const loadbalancerDeleteTimeoutSeconds = 600
-
 // CreateListener will create a listener for a given load balancer on a random
 // port with a random name. An error will be returned if the listener could not
 // be created.
@@ -43,7 +40,7 @@ func CreateListener(t *testing.T, client *gophercloud.ServiceClient, lb *loadbal
 
 	t.Logf("Successfully created listener %s", listenerName)
 
-	if err := WaitForLoadBalancerState(client, lb.ID, "ACTIVE", loadbalancerActiveTimeoutSeconds); err != nil {
+	if err := WaitForLoadBalancerState(client, lb.ID, "ACTIVE"); err != nil {
 		return listener, fmt.Errorf("Timed out waiting for loadbalancer to become active: %s", err)
 	}
 
@@ -52,6 +49,55 @@ func CreateListener(t *testing.T, client *gophercloud.ServiceClient, lb *loadbal
 	th.AssertEquals(t, listener.Loadbalancers[0].ID, lb.ID)
 	th.AssertEquals(t, listener.Protocol, string(listeners.ProtocolTCP))
 	th.AssertEquals(t, listener.ProtocolPort, listenerPort)
+
+	return listener, nil
+}
+
+// CreateListenerHTTP will create an HTTP-based listener for a given load
+// balancer on a random port with a random name. An error will be returned
+// if the listener could not be created.
+func CreateListenerHTTP(t *testing.T, client *gophercloud.ServiceClient, lb *loadbalancers.LoadBalancer) (*listeners.Listener, error) {
+	listenerName := tools.RandomString("TESTACCT-", 8)
+	listenerDescription := tools.RandomString("TESTACCT-DESC-", 8)
+	listenerPort := tools.RandomInt(1, 100)
+
+	t.Logf("Attempting to create listener %s on port %d", listenerName, listenerPort)
+
+	headers := map[string]string{
+		"X-Forwarded-For": "true",
+	}
+
+	tlsVersions := []listeners.TLSVersion{"TLSv1.2", "TLSv1.3"}
+	tlsVersionsExp := []string{"TLSv1.2", "TLSv1.3"}
+
+	createOpts := listeners.CreateOpts{
+		Name:           listenerName,
+		Description:    listenerDescription,
+		LoadbalancerID: lb.ID,
+		InsertHeaders:  headers,
+		Protocol:       listeners.ProtocolHTTP,
+		ProtocolPort:   listenerPort,
+		TLSVersions:    tlsVersions,
+	}
+
+	listener, err := listeners.Create(client, createOpts).Extract()
+	if err != nil {
+		return listener, err
+	}
+
+	t.Logf("Successfully created listener %s", listenerName)
+
+	if err := WaitForLoadBalancerState(client, lb.ID, "ACTIVE"); err != nil {
+		return listener, fmt.Errorf("Timed out waiting for loadbalancer to become active: %s", err)
+	}
+
+	th.AssertEquals(t, listener.Name, listenerName)
+	th.AssertEquals(t, listener.Description, listenerDescription)
+	th.AssertEquals(t, listener.Loadbalancers[0].ID, lb.ID)
+	th.AssertEquals(t, listener.Protocol, string(listeners.ProtocolHTTP))
+	th.AssertEquals(t, listener.ProtocolPort, listenerPort)
+	th.AssertDeepEquals(t, listener.InsertHeaders, headers)
+	th.AssertDeepEquals(t, listener.TLSVersions, tlsVersionsExp)
 
 	return listener, nil
 }
@@ -82,7 +128,7 @@ func CreateLoadBalancer(t *testing.T, client *gophercloud.ServiceClient, subnetI
 	t.Logf("Successfully created loadbalancer %s on subnet %s", lbName, subnetID)
 	t.Logf("Waiting for loadbalancer %s to become active", lbName)
 
-	if err := WaitForLoadBalancerState(client, lb.ID, "ACTIVE", loadbalancerActiveTimeoutSeconds); err != nil {
+	if err := WaitForLoadBalancerState(client, lb.ID, "ACTIVE"); err != nil {
 		return lb, err
 	}
 
@@ -92,6 +138,119 @@ func CreateLoadBalancer(t *testing.T, client *gophercloud.ServiceClient, subnetI
 	th.AssertEquals(t, lb.Description, lbDescription)
 	th.AssertEquals(t, lb.VipSubnetID, subnetID)
 	th.AssertEquals(t, lb.AdminStateUp, true)
+
+	if len(tags) > 0 {
+		th.AssertDeepEquals(t, lb.Tags, tags)
+	}
+
+	return lb, nil
+}
+
+// CreateLoadBalancerFullyPopulated will create a  fully populated load balancer with a random name on a given
+// subnet. It will contain a listener, l7policy, l7rule, pool, member and health monitor.
+// An error will be returned if the loadbalancer could not be created.
+func CreateLoadBalancerFullyPopulated(t *testing.T, client *gophercloud.ServiceClient, subnetID string, tags []string) (*loadbalancers.LoadBalancer, error) {
+	lbName := tools.RandomString("TESTACCT-", 8)
+	lbDescription := tools.RandomString("TESTACCT-DESC-", 8)
+	listenerName := tools.RandomString("TESTACCT-", 8)
+	listenerDescription := tools.RandomString("TESTACCT-DESC-", 8)
+	listenerPort := tools.RandomInt(1, 100)
+	policyName := tools.RandomString("TESTACCT-", 8)
+	policyDescription := tools.RandomString("TESTACCT-DESC-", 8)
+	poolName := tools.RandomString("TESTACCT-", 8)
+	poolDescription := tools.RandomString("TESTACCT-DESC-", 8)
+	memberName := tools.RandomString("TESTACCT-", 8)
+	memberPort := tools.RandomInt(100, 1000)
+	memberWeight := tools.RandomInt(1, 10)
+
+	t.Logf("Attempting to create fully populated loadbalancer %s on subnet %s which contains listener: %s, l7Policy: %s, pool %s, member %s",
+		lbName, subnetID, listenerName, policyName, poolName, memberName)
+
+	createOpts := loadbalancers.CreateOpts{
+		Name:         lbName,
+		Description:  lbDescription,
+		VipSubnetID:  subnetID,
+		AdminStateUp: gophercloud.Enabled,
+		Listeners: []listeners.CreateOpts{{
+			Name:         listenerName,
+			Description:  listenerDescription,
+			Protocol:     listeners.ProtocolHTTP,
+			ProtocolPort: listenerPort,
+			DefaultPool: &pools.CreateOpts{
+				Name:        poolName,
+				Description: poolDescription,
+				Protocol:    pools.ProtocolHTTP,
+				LBMethod:    pools.LBMethodLeastConnections,
+				Members: []pools.BatchUpdateMemberOpts{{
+					Name:         &memberName,
+					ProtocolPort: memberPort,
+					Weight:       &memberWeight,
+					Address:      "1.2.3.4",
+					SubnetID:     &subnetID,
+				}},
+				Monitor: &monitors.CreateOpts{
+					Delay:          10,
+					Timeout:        5,
+					MaxRetries:     5,
+					MaxRetriesDown: 4,
+					Type:           monitors.TypeHTTP,
+				},
+			},
+			L7Policies: []l7policies.CreateOpts{{
+				Name:        policyName,
+				Description: policyDescription,
+				Action:      l7policies.ActionRedirectToURL,
+				RedirectURL: "http://www.example.com",
+				Rules: []l7policies.CreateRuleOpts{{
+					RuleType:    l7policies.TypePath,
+					CompareType: l7policies.CompareTypeStartWith,
+					Value:       "/api",
+				}},
+			}},
+		}},
+	}
+	if len(tags) > 0 {
+		createOpts.Tags = tags
+	}
+
+	lb, err := loadbalancers.Create(client, createOpts).Extract()
+	if err != nil {
+		return lb, err
+	}
+
+	t.Logf("Successfully created loadbalancer %s on subnet %s", lbName, subnetID)
+	t.Logf("Waiting for loadbalancer %s to become active", lbName)
+
+	if err := WaitForLoadBalancerState(client, lb.ID, "ACTIVE"); err != nil {
+		return lb, err
+	}
+
+	t.Logf("LoadBalancer %s is active", lbName)
+
+	th.AssertEquals(t, lb.Name, lbName)
+	th.AssertEquals(t, lb.Description, lbDescription)
+	th.AssertEquals(t, lb.VipSubnetID, subnetID)
+	th.AssertEquals(t, lb.AdminStateUp, true)
+
+	th.AssertEquals(t, len(lb.Listeners), 1)
+	th.AssertEquals(t, lb.Listeners[0].Name, listenerName)
+	th.AssertEquals(t, lb.Listeners[0].Description, listenerDescription)
+	th.AssertEquals(t, lb.Listeners[0].ProtocolPort, listenerPort)
+
+	th.AssertEquals(t, len(lb.Listeners[0].L7Policies), 1)
+	th.AssertEquals(t, lb.Listeners[0].L7Policies[0].Name, policyName)
+	th.AssertEquals(t, lb.Listeners[0].L7Policies[0].Description, policyDescription)
+	th.AssertEquals(t, lb.Listeners[0].L7Policies[0].Description, policyDescription)
+	th.AssertEquals(t, len(lb.Listeners[0].L7Policies[0].Rules), 1)
+
+	th.AssertEquals(t, len(lb.Pools), 1)
+	th.AssertEquals(t, lb.Pools[0].Name, poolName)
+	th.AssertEquals(t, lb.Pools[0].Description, poolDescription)
+
+	th.AssertEquals(t, len(lb.Pools[0].Members), 1)
+	th.AssertEquals(t, lb.Pools[0].Members[0].Name, memberName)
+	th.AssertEquals(t, lb.Pools[0].Members[0].ProtocolPort, memberPort)
+	th.AssertEquals(t, lb.Pools[0].Members[0].Weight, memberWeight)
 
 	if len(tags) > 0 {
 		th.AssertDeepEquals(t, lb.Tags, tags)
@@ -130,7 +289,7 @@ func CreateMember(t *testing.T, client *gophercloud.ServiceClient, lb *loadbalan
 
 	t.Logf("Successfully created member %s", memberName)
 
-	if err := WaitForLoadBalancerState(client, lb.ID, "ACTIVE", loadbalancerActiveTimeoutSeconds); err != nil {
+	if err := WaitForLoadBalancerState(client, lb.ID, "ACTIVE"); err != nil {
 		return member, fmt.Errorf("Timed out waiting for loadbalancer to become active: %s", err)
 	}
 
@@ -147,12 +306,13 @@ func CreateMonitor(t *testing.T, client *gophercloud.ServiceClient, lb *loadbala
 	t.Logf("Attempting to create monitor %s", monitorName)
 
 	createOpts := monitors.CreateOpts{
-		PoolID:     pool.ID,
-		Name:       monitorName,
-		Delay:      10,
-		Timeout:    5,
-		MaxRetries: 5,
-		Type:       monitors.TypePING,
+		PoolID:         pool.ID,
+		Name:           monitorName,
+		Delay:          10,
+		Timeout:        5,
+		MaxRetries:     5,
+		MaxRetriesDown: 4,
+		Type:           monitors.TypePING,
 	}
 
 	monitor, err := monitors.Create(client, createOpts).Extract()
@@ -162,12 +322,16 @@ func CreateMonitor(t *testing.T, client *gophercloud.ServiceClient, lb *loadbala
 
 	t.Logf("Successfully created monitor: %s", monitorName)
 
-	if err := WaitForLoadBalancerState(client, lb.ID, "ACTIVE", loadbalancerActiveTimeoutSeconds); err != nil {
+	if err := WaitForLoadBalancerState(client, lb.ID, "ACTIVE"); err != nil {
 		return monitor, fmt.Errorf("Timed out waiting for loadbalancer to become active: %s", err)
 	}
 
 	th.AssertEquals(t, monitor.Name, monitorName)
 	th.AssertEquals(t, monitor.Type, monitors.TypePING)
+	th.AssertEquals(t, monitor.Delay, 10)
+	th.AssertEquals(t, monitor.Timeout, 5)
+	th.AssertEquals(t, monitor.MaxRetries, 5)
+	th.AssertEquals(t, monitor.MaxRetriesDown, 4)
 
 	return monitor, nil
 }
@@ -196,13 +360,50 @@ func CreatePool(t *testing.T, client *gophercloud.ServiceClient, lb *loadbalance
 
 	t.Logf("Successfully created pool %s", poolName)
 
-	if err := WaitForLoadBalancerState(client, lb.ID, "ACTIVE", loadbalancerActiveTimeoutSeconds); err != nil {
+	if err := WaitForLoadBalancerState(client, lb.ID, "ACTIVE"); err != nil {
 		return pool, fmt.Errorf("Timed out waiting for loadbalancer to become active: %s", err)
 	}
 
 	th.AssertEquals(t, pool.Name, poolName)
 	th.AssertEquals(t, pool.Description, poolDescription)
 	th.AssertEquals(t, pool.Protocol, string(pools.ProtocolTCP))
+	th.AssertEquals(t, pool.Loadbalancers[0].ID, lb.ID)
+	th.AssertEquals(t, pool.LBMethod, string(pools.LBMethodLeastConnections))
+
+	return pool, nil
+}
+
+// CreatePoolHTTP will create an HTTP-based pool with a random name with a
+// specified listener and loadbalancer. An error will be returned if the pool
+// could not be created.
+func CreatePoolHTTP(t *testing.T, client *gophercloud.ServiceClient, lb *loadbalancers.LoadBalancer) (*pools.Pool, error) {
+	poolName := tools.RandomString("TESTACCT-", 8)
+	poolDescription := tools.RandomString("TESTACCT-DESC-", 8)
+
+	t.Logf("Attempting to create pool %s", poolName)
+
+	createOpts := pools.CreateOpts{
+		Name:           poolName,
+		Description:    poolDescription,
+		Protocol:       pools.ProtocolHTTP,
+		LoadbalancerID: lb.ID,
+		LBMethod:       pools.LBMethodLeastConnections,
+	}
+
+	pool, err := pools.Create(client, createOpts).Extract()
+	if err != nil {
+		return pool, err
+	}
+
+	t.Logf("Successfully created pool %s", poolName)
+
+	if err := WaitForLoadBalancerState(client, lb.ID, "ACTIVE"); err != nil {
+		return pool, fmt.Errorf("Timed out waiting for loadbalancer to become active: %s", err)
+	}
+
+	th.AssertEquals(t, pool.Name, poolName)
+	th.AssertEquals(t, pool.Description, poolDescription)
+	th.AssertEquals(t, pool.Protocol, string(pools.ProtocolHTTP))
 	th.AssertEquals(t, pool.Loadbalancers[0].ID, lb.ID)
 	th.AssertEquals(t, pool.LBMethod, string(pools.LBMethodLeastConnections))
 
@@ -233,7 +434,7 @@ func CreateL7Policy(t *testing.T, client *gophercloud.ServiceClient, listener *l
 
 	t.Logf("Successfully created l7 policy %s", policyName)
 
-	if err := WaitForLoadBalancerState(client, lb.ID, "ACTIVE", loadbalancerActiveTimeoutSeconds); err != nil {
+	if err := WaitForLoadBalancerState(client, lb.ID, "ACTIVE"); err != nil {
 		return policy, fmt.Errorf("Timed out waiting for loadbalancer to become active: %s", err)
 	}
 
@@ -263,7 +464,7 @@ func CreateL7Rule(t *testing.T, client *gophercloud.ServiceClient, policyID stri
 
 	t.Logf("Successfully created l7 rule for policy %s", policyID)
 
-	if err := WaitForLoadBalancerState(client, lb.ID, "ACTIVE", loadbalancerActiveTimeoutSeconds); err != nil {
+	if err := WaitForLoadBalancerState(client, lb.ID, "ACTIVE"); err != nil {
 		return rule, fmt.Errorf("Timed out waiting for loadbalancer to become active: %s", err)
 	}
 
@@ -286,7 +487,7 @@ func DeleteL7Policy(t *testing.T, client *gophercloud.ServiceClient, lbID, polic
 		}
 	}
 
-	if err := WaitForLoadBalancerState(client, lbID, "ACTIVE", loadbalancerActiveTimeoutSeconds); err != nil {
+	if err := WaitForLoadBalancerState(client, lbID, "ACTIVE"); err != nil {
 		t.Fatalf("Timed out waiting for loadbalancer to become active: %s", err)
 	}
 
@@ -305,7 +506,7 @@ func DeleteL7Rule(t *testing.T, client *gophercloud.ServiceClient, lbID, policyI
 		}
 	}
 
-	if err := WaitForLoadBalancerState(client, lbID, "ACTIVE", loadbalancerActiveTimeoutSeconds); err != nil {
+	if err := WaitForLoadBalancerState(client, lbID, "ACTIVE"); err != nil {
 		t.Fatalf("Timed out waiting for loadbalancer to become active: %s", err)
 	}
 
@@ -324,7 +525,7 @@ func DeleteListener(t *testing.T, client *gophercloud.ServiceClient, lbID, liste
 		}
 	}
 
-	if err := WaitForLoadBalancerState(client, lbID, "ACTIVE", loadbalancerActiveTimeoutSeconds); err != nil {
+	if err := WaitForLoadBalancerState(client, lbID, "ACTIVE"); err != nil {
 		t.Fatalf("Timed out waiting for loadbalancer to become active: %s", err)
 	}
 
@@ -343,7 +544,7 @@ func DeleteMember(t *testing.T, client *gophercloud.ServiceClient, lbID, poolID,
 		}
 	}
 
-	if err := WaitForLoadBalancerState(client, lbID, "ACTIVE", loadbalancerActiveTimeoutSeconds); err != nil {
+	if err := WaitForLoadBalancerState(client, lbID, "ACTIVE"); err != nil {
 		t.Fatalf("Timed out waiting for loadbalancer to become active: %s", err)
 	}
 
@@ -368,7 +569,7 @@ func DeleteLoadBalancer(t *testing.T, client *gophercloud.ServiceClient, lbID st
 
 	t.Logf("Waiting for loadbalancer %s to delete", lbID)
 
-	if err := WaitForLoadBalancerState(client, lbID, "DELETED", loadbalancerActiveTimeoutSeconds); err != nil {
+	if err := WaitForLoadBalancerState(client, lbID, "DELETED"); err != nil {
 		t.Fatalf("Loadbalancer did not delete in time: %s", err)
 	}
 
@@ -391,7 +592,7 @@ func CascadeDeleteLoadBalancer(t *testing.T, client *gophercloud.ServiceClient, 
 
 	t.Logf("Waiting for loadbalancer %s to cascade delete", lbID)
 
-	if err := WaitForLoadBalancerState(client, lbID, "DELETED", loadbalancerActiveTimeoutSeconds); err != nil {
+	if err := WaitForLoadBalancerState(client, lbID, "DELETED"); err != nil {
 		t.Fatalf("Loadbalancer did not delete in time.")
 	}
 
@@ -410,7 +611,7 @@ func DeleteMonitor(t *testing.T, client *gophercloud.ServiceClient, lbID, monito
 		}
 	}
 
-	if err := WaitForLoadBalancerState(client, lbID, "ACTIVE", loadbalancerActiveTimeoutSeconds); err != nil {
+	if err := WaitForLoadBalancerState(client, lbID, "ACTIVE"); err != nil {
 		t.Fatalf("Timed out waiting for loadbalancer to become active: %s", err)
 	}
 
@@ -428,7 +629,7 @@ func DeletePool(t *testing.T, client *gophercloud.ServiceClient, lbID, poolID st
 		}
 	}
 
-	if err := WaitForLoadBalancerState(client, lbID, "ACTIVE", loadbalancerActiveTimeoutSeconds); err != nil {
+	if err := WaitForLoadBalancerState(client, lbID, "ACTIVE"); err != nil {
 		t.Fatalf("Timed out waiting for loadbalancer to become active: %s", err)
 	}
 
@@ -436,8 +637,8 @@ func DeletePool(t *testing.T, client *gophercloud.ServiceClient, lbID, poolID st
 }
 
 // WaitForLoadBalancerState will wait until a loadbalancer reaches a given state.
-func WaitForLoadBalancerState(client *gophercloud.ServiceClient, lbID, status string, secs int) error {
-	return gophercloud.WaitFor(secs, func() (bool, error) {
+func WaitForLoadBalancerState(client *gophercloud.ServiceClient, lbID, status string) error {
+	return tools.WaitFor(func() (bool, error) {
 		current, err := loadbalancers.Get(client, lbID).Extract()
 		if err != nil {
 			if httpStatus, ok := err.(gophercloud.ErrDefault404); ok {

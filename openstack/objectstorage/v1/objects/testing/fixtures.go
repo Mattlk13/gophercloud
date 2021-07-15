@@ -17,11 +17,30 @@ import (
 // responds with a `Download` response.
 func HandleDownloadObjectSuccessfully(t *testing.T) {
 	th.Mux.HandleFunc("/testContainer/testObject", func(w http.ResponseWriter, r *http.Request) {
+		date := time.Date(2009, time.November, 10, 23, 0, 0, 0, time.UTC)
 		th.TestMethod(t, r, "GET")
 		th.TestHeader(t, r, "X-Auth-Token", fake.TokenID)
 		th.TestHeader(t, r, "Accept", "application/json")
-		w.Header().Set("Date", "Wed, 10 Nov 2009 23:00:00 UTC")
+		w.Header().Set("Date", date.Format(time.RFC1123))
 		w.Header().Set("X-Static-Large-Object", "True")
+
+		unModifiedSince := r.Header.Get("If-Unmodified-Since")
+		modifiedSince := r.Header.Get("If-Modified-Since")
+		if unModifiedSince != "" {
+			ums, _ := time.Parse(time.RFC1123, unModifiedSince)
+			if ums.Before(date) || ums.Equal(date) {
+				w.WriteHeader(http.StatusPreconditionFailed)
+				return
+			}
+		}
+		if modifiedSince != "" {
+			ms, _ := time.Parse(time.RFC1123, modifiedSince)
+			if ms.After(date) {
+				w.WriteHeader(http.StatusNotModified)
+				return
+			}
+		}
+		w.Header().Set("Last-Modified", date.Format(time.RFC1123))
 		w.WriteHeader(http.StatusOK)
 		fmt.Fprintf(w, "Successful download with Gophercloud")
 	})
@@ -151,6 +170,7 @@ func HandleCreateTextObjectSuccessfully(t *testing.T, content string) {
 		th.TestHeader(t, r, "X-Auth-Token", fake.TokenID)
 		th.TestHeader(t, r, "Content-Type", "text/plain")
 		th.TestHeader(t, r, "Accept", "application/json")
+		th.TestBody(t, r, `Did gyre and gimble in the wabe`)
 
 		hash := md5.New()
 		io.WriteString(hash, content)
@@ -169,6 +189,7 @@ func HandleCreateTextWithCacheControlSuccessfully(t *testing.T, content string) 
 		th.TestHeader(t, r, "X-Auth-Token", fake.TokenID)
 		th.TestHeader(t, r, "Cache-Control", `max-age="3600", public`)
 		th.TestHeader(t, r, "Accept", "application/json")
+		th.TestBody(t, r, `All mimsy were the borogoves`)
 
 		hash := md5.New()
 		io.WriteString(hash, content)
@@ -187,6 +208,7 @@ func HandleCreateTypelessObjectSuccessfully(t *testing.T, content string) {
 		th.TestMethod(t, r, "PUT")
 		th.TestHeader(t, r, "X-Auth-Token", fake.TokenID)
 		th.TestHeader(t, r, "Accept", "application/json")
+		th.TestBody(t, r, `The sky was the color of television, tuned to a dead channel.`)
 
 		if contentType, present := r.Header["Content-Type"]; present {
 			t.Errorf("Expected Content-Type header to be omitted, but was %#v", contentType)
@@ -224,6 +246,35 @@ func HandleDeleteObjectSuccessfully(t *testing.T) {
 	})
 }
 
+const bulkDeleteResponse = `
+{
+    "Response Status": "foo",
+    "Response Body": "bar",
+    "Errors": [],
+    "Number Deleted": 2,
+    "Number Not Found": 0
+}
+`
+
+// HandleBulkDeleteSuccessfully creates an HTTP handler at `/` on the test
+// handler mux that responds with a `BulkDelete` response.
+func HandleBulkDeleteSuccessfully(t *testing.T) {
+	th.Mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		th.TestMethod(t, r, "POST")
+		th.TestHeader(t, r, "X-Auth-Token", fake.TokenID)
+		th.TestHeader(t, r, "Accept", "application/json")
+		th.TestHeader(t, r, "Content-Type", "text/plain")
+		th.TestFormValues(t, r, map[string]string{
+			"bulk-delete": "true",
+		})
+		th.TestBody(t, r, "testContainer/testObject1\ntestContainer/testObject2\n")
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprintf(w, bulkDeleteResponse)
+	})
+}
+
 // HandleUpdateObjectSuccessfully creates an HTTP handler at `/testContainer/testObject` on the test handler mux that
 // responds with a `Update` response.
 func HandleUpdateObjectSuccessfully(t *testing.T) {
@@ -232,6 +283,7 @@ func HandleUpdateObjectSuccessfully(t *testing.T) {
 		th.TestHeader(t, r, "X-Auth-Token", fake.TokenID)
 		th.TestHeader(t, r, "Accept", "application/json")
 		th.TestHeader(t, r, "X-Object-Meta-Gophercloud-Test", "objects")
+		th.TestHeader(t, r, "X-Remove-Object-Meta-Gophercloud-Test-Remove", "remove")
 		w.WriteHeader(http.StatusAccepted)
 	})
 }

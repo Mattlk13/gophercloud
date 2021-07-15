@@ -174,8 +174,8 @@ func HandleImageCreationSuccessfully(t *testing.T) {
 			]
 		}`)
 
-		w.WriteHeader(http.StatusCreated)
 		w.Header().Add("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
 		fmt.Fprintf(w, `{
 			"status": "queued",
 			"name": "Ubuntu 12.10",
@@ -220,8 +220,10 @@ func HandleImageCreationSuccessfullyNulls(t *testing.T) {
 			]
 		}`)
 
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("OpenStack-image-import-methods", "glance-direct,web-download")
+		w.Header().Set("OpenStack-image-store-ids", "123,456")
 		w.WriteHeader(http.StatusCreated)
-		w.Header().Add("Content-Type", "application/json")
 		fmt.Fprintf(w, `{
 			"architecture": "x86_64",
 			"status": "queued",
@@ -254,8 +256,8 @@ func HandleImageGetSuccessfully(t *testing.T) {
 		th.TestMethod(t, r, "GET")
 		th.TestHeader(t, r, "X-Auth-Token", fakeclient.TokenID)
 
-		w.WriteHeader(http.StatusOK)
 		w.Header().Add("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
 		fmt.Fprintf(w, `{
 			"status": "active",
 			"name": "cirros-0.3.2-x86_64-disk",
@@ -265,6 +267,7 @@ func HandleImageGetSuccessfully(t *testing.T) {
 			"disk_format": "qcow2",
 			"updated_at": "2014-05-05T17:15:11Z",
 			"visibility": "public",
+			"os_hidden": false,
 			"self": "/v2/images/1bea47ed-f6a9-463b-b423-14b9cca9ad27",
 			"min_disk": 0,
 			"protected": false,
@@ -317,18 +320,34 @@ func HandleImageUpdateSuccessfully(t *testing.T) {
 				"op": "replace",
 				"path": "/min_disk",
 				"value": 21
+			},
+			{
+				"op": "replace",
+				"path": "/min_ram",
+				"value": 1024
+			},
+			{
+				"op": "replace",
+				"path": "/os_hidden",
+				"value": false
+			},
+			{
+				"op": "add",
+				"path": "/empty_value",
+				"value": ""
 			}
 		]`)
 
 		th.AssertEquals(t, "application/openstack-images-v2.1-json-patch", r.Header.Get("Content-Type"))
 
-		w.WriteHeader(http.StatusOK)
 		w.Header().Add("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
 		fmt.Fprintf(w, `{
 			"id": "da3b75d9-3f4a-40e7-8a2c-bfab23927dea",
 			"name": "Fedora 17",
 			"status": "active",
 			"visibility": "public",
+			"os_hidden": false,
 			"size": 2254249,
 			"checksum": "2cec138d7dae2aa59038ef8c9aec2390",
 			"tags": [
@@ -341,11 +360,12 @@ func HandleImageUpdateSuccessfully(t *testing.T) {
 			"file": "/v2/images/da3b75d9-3f4a-40e7-8a2c-bfab23927dea/file",
 			"schema": "/v2/schemas/image",
 			"owner": "",
-			"min_ram": 0,
+			"min_ram": 1024,
 			"min_disk": 21,
 			"disk_format": "",
 			"virtual_size": 0,
 			"container_format": "",
+			"empty_value": "",
 			"hw_disk_bus": "scsi",
 			"hw_disk_bus_model": "virtio-scsi",
 			"hw_scsi_model": "virtio-scsi"
@@ -374,6 +394,7 @@ func HandleImageListByTagsSuccessfully(t *testing.T) {
           "disk_format": "qcow2",
           "updated_at": "2014-05-05T17:15:11Z",
           "visibility": "public",
+          "os_hidden": false,
           "self": "/v2/images/1bea47ed-f6a9-463b-b423-14b9cca9ad27",
           "min_disk": 0,
           "protected": false,
@@ -420,8 +441,8 @@ func HandleImageUpdatePropertiesSuccessfully(t *testing.T) {
 
 		th.AssertEquals(t, "application/openstack-images-v2.1-json-patch", r.Header.Get("Content-Type"))
 
-		w.WriteHeader(http.StatusOK)
 		w.Header().Add("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
 		fmt.Fprintf(w, `{
 			"id": "da3b75d9-3f4a-40e7-8a2c-bfab23927dea",
 			"name": "Fedora 17",

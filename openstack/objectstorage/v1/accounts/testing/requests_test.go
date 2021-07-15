@@ -14,7 +14,10 @@ func TestUpdateAccount(t *testing.T) {
 	defer th.TeardownHTTP()
 	HandleUpdateAccountSuccessfully(t)
 
-	options := &accounts.UpdateOpts{Metadata: map[string]string{"gophercloud-test": "accounts"}}
+	options := &accounts.UpdateOpts{
+		Metadata:       map[string]string{"gophercloud-test": "accounts"},
+		RemoveMetadata: []string{"gophercloud-test-remove"},
+	}
 	res := accounts.Update(fake.ServiceClient(), options)
 	th.AssertNoErr(t, res.Err)
 
@@ -31,7 +34,7 @@ func TestGetAccount(t *testing.T) {
 	defer th.TeardownHTTP()
 	HandleGetAccountSuccessfully(t)
 
-	expectedMetadata := map[string]string{"Subject": "books", "Quota-Bytes": "42"}
+	expectedMetadata := map[string]string{"Subject": "books", "Quota-Bytes": "42", "Temp-Url-Key": "testsecret"}
 	res := accounts.Get(fake.ServiceClient(), &accounts.GetOpts{})
 	th.AssertNoErr(t, res.Err)
 	actualMetadata, _ := res.ExtractMetadata()
@@ -46,6 +49,7 @@ func TestGetAccount(t *testing.T) {
 		ObjectCount:    5,
 		BytesUsed:      14,
 		Date:           time.Date(2014, time.January, 17, 16, 9, 56, 0, time.UTC),
+		TempURLKey:     "testsecret",
 	}
 	actual, err := res.Extract()
 	th.AssertNoErr(t, err)

@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack/identity/v3/applicationcredentials"
 	th "github.com/gophercloud/gophercloud/testhelper"
 	"github.com/gophercloud/gophercloud/testhelper/client"
@@ -14,6 +13,7 @@ import (
 
 const userID = "2844b2a08be147a08ef58317d6471f1f"
 const applicationCredentialID = "f741662395b249c9b8acdebf1722c5ae"
+const accessRuleID = "07d719df00f349ef8de77d542edf010c"
 
 // ListOutput provides a single page of ApplicationCredential results.
 const ListOutput = `
@@ -59,7 +59,7 @@ const ListOutput = `
           "name": "network_viewer"
         }
       ],
-      "expires_at": "2019-03-12T12:12:12.000000",
+      "expires_at": "2019-03-12T12:12:12.123456",
       "unrestricted": true,
       "project_id": "53c2b94f63fb4f43a21b92d119ce549f",
       "id": "6b8cc7647da64166a4a3cc0c88ebbabb",
@@ -84,6 +84,14 @@ const GetOutput = `
         "name": "compute_viewer"
       }
     ],
+    "access_rules": [
+      {
+        "path": "/v2.0/metrics",
+        "id": "07d719df00f349ef8de77d542edf010c",
+        "service": "monitoring",
+        "method": "GET"
+      }
+    ],
     "expires_at": null,
     "unrestricted": false,
     "project_id": "53c2b94f63fb4f43a21b92d119ce549f",
@@ -104,6 +112,13 @@ const CreateRequest = `
         "id": "31f87923ae4a4d119aa0b85dcdbeed13"
       }
     ],
+    "access_rules": [
+      {
+        "path": "/v2.0/metrics",
+        "method": "GET",
+        "service": "monitoring"
+      }
+    ],
     "name": "test"
   }
 }
@@ -121,6 +136,14 @@ const CreateResponse = `
         "id": "31f87923ae4a4d119aa0b85dcdbeed13",
         "domain_id": null,
         "name": "compute_viewer"
+      }
+    ],
+    "access_rules": [
+      {
+        "path": "/v2.0/metrics",
+        "id": "07d719df00f349ef8de77d542edf010c",
+        "service": "monitoring",
+        "method": "GET"
       }
     ],
     "expires_at": null,
@@ -184,7 +207,7 @@ const CreateUnrestrictedRequest = `
         "id": "4494bc5bea1a4105ad7fbba6a7eb9ef4"
       }
     ],
-    "expires_at": "2019-03-12T12:12:12.000000",
+    "expires_at": "2019-03-12T12:12:12.123456",
     "name": "test2"
   }
 }
@@ -209,12 +232,48 @@ const CreateUnrestrictedResponse = `
         "name": "network_viewer"
       }
     ],
-    "expires_at": "2019-03-12T12:12:12.000000",
+    "expires_at": "2019-03-12T12:12:12.123456",
     "secret": "generated_secret",
     "unrestricted": true,
     "project_id": "53c2b94f63fb4f43a21b92d119ce549f",
     "id": "6b8cc7647da64166a4a3cc0c88ebbabb",
     "name": "test2"
+  }
+}
+`
+
+// ListAccessRulesOutput provides a single page of AccessRules results.
+const ListAccessRulesOutput = `
+{
+  "links": {
+    "self": "https://example.com/identity/v3/users/2844b2a08be147a08ef58317d6471f1f/access_rules",
+    "previous": null,
+    "next": null
+  },
+  "access_rules": [
+    {
+      "path": "/v2.0/metrics",
+      "links": {
+        "self": "https://example.com/identity/v3/access_rules/07d719df00f349ef8de77d542edf010c"
+      },
+      "id": "07d719df00f349ef8de77d542edf010c",
+      "service": "monitoring",
+      "method": "GET"
+    }
+  ]
+}`
+
+// GetAccessRuleOutput provides a Get result.
+const GetAccessRuleOutput = `
+{
+  "access_rule": {
+    "path": "/v2.0/metrics",
+    "links": {
+      "self": "https://example.com/identity/v3/access_rules/07d719df00f349ef8de77d542edf010c"
+    },
+    "id": "07d719df00f349ef8de77d542edf010c",
+    "service": "monitoring",
+    "method": "GET"
   }
 }
 `
@@ -228,9 +287,17 @@ var ApplicationCredential = applicationcredentials.ApplicationCredential{
 	Secret:       "",
 	ProjectID:    "53c2b94f63fb4f43a21b92d119ce549f",
 	Roles: []applicationcredentials.Role{
-		applicationcredentials.Role{
+		{
 			ID:   "31f87923ae4a4d119aa0b85dcdbeed13",
 			Name: "compute_viewer",
+		},
+	},
+	AccessRules: []applicationcredentials.AccessRule{
+		{
+			ID:      "07d719df00f349ef8de77d542edf010c",
+			Path:    "/v2.0/metrics",
+			Method:  "GET",
+			Service: "monitoring",
 		},
 	},
 	ExpiresAt: nilTime,
@@ -247,7 +314,7 @@ var ApplicationCredentialNoSecretResponse = applicationcredentials.ApplicationCr
 	Secret:       "generated_secret",
 	ProjectID:    "53c2b94f63fb4f43a21b92d119ce549f",
 	Roles: []applicationcredentials.Role{
-		applicationcredentials.Role{
+		{
 			ID:   "31f87923ae4a4d119aa0b85dcdbeed13",
 			Name: "compute_viewer",
 		},
@@ -258,7 +325,7 @@ var ApplicationCredentialNoSecretResponse = applicationcredentials.ApplicationCr
 	},
 }
 
-var ApplationCredentialExpiresAt, _ = time.Parse(gophercloud.RFC3339MilliNoZ, "2019-03-12T12:12:12.000000")
+var ApplationCredentialExpiresAt = time.Date(2019, 3, 12, 12, 12, 12, 123456000, time.UTC)
 var UnrestrictedApplicationCredential = applicationcredentials.ApplicationCredential{
 	ID:           "6b8cc7647da64166a4a3cc0c88ebbabb",
 	Name:         "test2",
@@ -267,11 +334,11 @@ var UnrestrictedApplicationCredential = applicationcredentials.ApplicationCreden
 	Secret:       "",
 	ProjectID:    "53c2b94f63fb4f43a21b92d119ce549f",
 	Roles: []applicationcredentials.Role{
-		applicationcredentials.Role{
+		{
 			ID:   "31f87923ae4a4d119aa0b85dcdbeed13",
 			Name: "compute_viewer",
 		},
-		applicationcredentials.Role{
+		{
 			ID:   "4494bc5bea1a4105ad7fbba6a7eb9ef4",
 			Name: "network_viewer",
 		},
@@ -290,7 +357,7 @@ var FirstApplicationCredential = applicationcredentials.ApplicationCredential{
 	Secret:       "",
 	ProjectID:    "53c2b94f63fb4f43a21b92d119ce549f",
 	Roles: []applicationcredentials.Role{
-		applicationcredentials.Role{
+		{
 			ID:   "31f87923ae4a4d119aa0b85dcdbeed13",
 			Name: "compute_viewer",
 		},
@@ -309,11 +376,11 @@ var SecondApplicationCredential = applicationcredentials.ApplicationCredential{
 	Secret:       "",
 	ProjectID:    "53c2b94f63fb4f43a21b92d119ce549f",
 	Roles: []applicationcredentials.Role{
-		applicationcredentials.Role{
+		{
 			ID:   "31f87923ae4a4d119aa0b85dcdbeed13",
 			Name: "compute_viewer",
 		},
-		applicationcredentials.Role{
+		{
 			ID:   "4494bc5bea1a4105ad7fbba6a7eb9ef4",
 			Name: "network_viewer",
 		},
@@ -322,6 +389,17 @@ var SecondApplicationCredential = applicationcredentials.ApplicationCredential{
 	Links: map[string]interface{}{
 		"self": "https://identity/v3/users/2844b2a08be147a08ef58317d6471f1f/application_credentials/6b8cc7647da64166a4a3cc0c88ebbabb",
 	},
+}
+
+var AccessRule = applicationcredentials.AccessRule{
+	Path:    "/v2.0/metrics",
+	ID:      "07d719df00f349ef8de77d542edf010c",
+	Service: "monitoring",
+	Method:  "GET",
+}
+
+var ExpectedAccessRulesSlice = []applicationcredentials.AccessRule{
+	AccessRule,
 }
 
 // ExpectedApplicationCredentialsSlice is the slice of application credentials expected to be returned from ListOutput.
@@ -396,6 +474,45 @@ func HandleCreateUnrestrictedApplicationCredentialSuccessfully(t *testing.T) {
 // test handler mux that tests application credential deletion.
 func HandleDeleteApplicationCredentialSuccessfully(t *testing.T) {
 	th.Mux.HandleFunc("/users/2844b2a08be147a08ef58317d6471f1f/application_credentials/f741662395b249c9b8acdebf1722c5ae", func(w http.ResponseWriter, r *http.Request) {
+		th.TestMethod(t, r, "DELETE")
+		th.TestHeader(t, r, "X-Auth-Token", client.TokenID)
+
+		w.WriteHeader(http.StatusNoContent)
+	})
+}
+
+// HandleListAccessRulesSuccessfully creates an HTTP handler at `/users` on the
+// test handler mux that responds with a list of two applicationcredentials.
+func HandleListAccessRulesSuccessfully(t *testing.T) {
+	th.Mux.HandleFunc("/users/2844b2a08be147a08ef58317d6471f1f/access_rules", func(w http.ResponseWriter, r *http.Request) {
+		th.TestMethod(t, r, "GET")
+		th.TestHeader(t, r, "Accept", "application/json")
+		th.TestHeader(t, r, "X-Auth-Token", client.TokenID)
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprintf(w, ListAccessRulesOutput)
+	})
+}
+
+// HandleGetAccessRuleSuccessfully creates an HTTP handler at `/users` on the
+// test handler mux that responds with a single application credential.
+func HandleGetAccessRuleSuccessfully(t *testing.T) {
+	th.Mux.HandleFunc("/users/2844b2a08be147a08ef58317d6471f1f/access_rules/07d719df00f349ef8de77d542edf010c", func(w http.ResponseWriter, r *http.Request) {
+		th.TestMethod(t, r, "GET")
+		th.TestHeader(t, r, "Accept", "application/json")
+		th.TestHeader(t, r, "X-Auth-Token", client.TokenID)
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprintf(w, GetAccessRuleOutput)
+	})
+}
+
+// HandleDeleteAccessRuleSuccessfully creates an HTTP handler at `/users` on the
+// test handler mux that tests application credential deletion.
+func HandleDeleteAccessRuleSuccessfully(t *testing.T) {
+	th.Mux.HandleFunc("/users/2844b2a08be147a08ef58317d6471f1f/access_rules/07d719df00f349ef8de77d542edf010c", func(w http.ResponseWriter, r *http.Request) {
 		th.TestMethod(t, r, "DELETE")
 		th.TestHeader(t, r, "X-Auth-Token", client.TokenID)
 

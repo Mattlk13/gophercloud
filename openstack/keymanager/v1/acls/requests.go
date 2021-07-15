@@ -6,13 +6,15 @@ import (
 
 // GetContainerACL retrieves the ACL of a container.
 func GetContainerACL(client *gophercloud.ServiceClient, containerID string) (r ACLResult) {
-	_, r.Err = client.Get(containerURL(client, containerID), &r.Body, nil)
+	resp, err := client.Get(containerURL(client, containerID), &r.Body, nil)
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
 	return
 }
 
 // GetSecretACL retrieves the ACL of a secret.
 func GetSecretACL(client *gophercloud.ServiceClient, secretID string) (r ACLResult) {
-	_, r.Err = client.Get(secretURL(client, secretID), &r.Body, nil)
+	resp, err := client.Get(secretURL(client, secretID), &r.Body, nil)
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
 	return
 }
 
@@ -22,8 +24,8 @@ type SetOptsBuilder interface {
 	ToACLSetMap() (map[string]interface{}, error)
 }
 
-// SetOpts represents options to set an ACL on a resource.
-type SetOpts struct {
+// SetOpt represents options to set a particular ACL type on a resource.
+type SetOpt struct {
 	// Type is the type of ACL to set. ie: read.
 	Type string `json:"-" required:"true"`
 
@@ -34,9 +36,20 @@ type SetOpts struct {
 	ProjectAccess *bool `json:"project-access,omitempty"`
 }
 
+// SetOpts represents options to set an ACL on a resource.
+type SetOpts []SetOpt
+
 // ToACLSetMap formats a SetOpts into a set request.
 func (opts SetOpts) ToACLSetMap() (map[string]interface{}, error) {
-	return gophercloud.BuildRequestBody(opts, opts.Type)
+	b := make(map[string]interface{})
+	for _, v := range opts {
+		m, err := gophercloud.BuildRequestBody(v, v.Type)
+		if err != nil {
+			return nil, err
+		}
+		b[v.Type] = m[v.Type]
+	}
+	return b, nil
 }
 
 // SetContainerACL will set an ACL on a container.
@@ -47,9 +60,10 @@ func SetContainerACL(client *gophercloud.ServiceClient, containerID string, opts
 		return
 	}
 
-	_, r.Err = client.Put(containerURL(client, containerID), &b, &r.Body, &gophercloud.RequestOpts{
+	resp, err := client.Put(containerURL(client, containerID), &b, &r.Body, &gophercloud.RequestOpts{
 		OkCodes: []int{200},
 	})
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
 	return
 }
 
@@ -61,9 +75,10 @@ func SetSecretACL(client *gophercloud.ServiceClient, secretID string, opts SetOp
 		return
 	}
 
-	_, r.Err = client.Put(secretURL(client, secretID), &b, &r.Body, &gophercloud.RequestOpts{
+	resp, err := client.Put(secretURL(client, secretID), &b, &r.Body, &gophercloud.RequestOpts{
 		OkCodes: []int{200},
 	})
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
 	return
 }
 
@@ -75,9 +90,10 @@ func UpdateContainerACL(client *gophercloud.ServiceClient, containerID string, o
 		return
 	}
 
-	_, r.Err = client.Patch(containerURL(client, containerID), &b, &r.Body, &gophercloud.RequestOpts{
+	resp, err := client.Patch(containerURL(client, containerID), &b, &r.Body, &gophercloud.RequestOpts{
 		OkCodes: []int{200},
 	})
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
 	return
 }
 
@@ -89,24 +105,27 @@ func UpdateSecretACL(client *gophercloud.ServiceClient, secretID string, opts Se
 		return
 	}
 
-	_, r.Err = client.Patch(secretURL(client, secretID), &b, &r.Body, &gophercloud.RequestOpts{
+	resp, err := client.Patch(secretURL(client, secretID), &b, &r.Body, &gophercloud.RequestOpts{
 		OkCodes: []int{200},
 	})
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
 	return
 }
 
 // DeleteContainerACL will delete an ACL from a conatiner.
 func DeleteContainerACL(client *gophercloud.ServiceClient, containerID string) (r DeleteResult) {
-	_, r.Err = client.Delete(containerURL(client, containerID), &gophercloud.RequestOpts{
+	resp, err := client.Delete(containerURL(client, containerID), &gophercloud.RequestOpts{
 		OkCodes: []int{200},
 	})
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
 	return
 }
 
 // DeleteSecretACL will delete an ACL from a secret.
 func DeleteSecretACL(client *gophercloud.ServiceClient, secretID string) (r DeleteResult) {
-	_, r.Err = client.Delete(secretURL(client, secretID), &gophercloud.RequestOpts{
+	resp, err := client.Delete(secretURL(client, secretID), &gophercloud.RequestOpts{
 		OkCodes: []int{200},
 	})
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
 	return
 }

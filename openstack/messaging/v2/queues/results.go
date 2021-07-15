@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 
 	"github.com/gophercloud/gophercloud"
-	"github.com/gophercloud/gophercloud/internal"
 	"github.com/gophercloud/gophercloud/pagination"
 )
 
@@ -88,6 +87,9 @@ type QueueDetails struct {
 	// The max post size of messages defined for the queue.
 	MaxMessagesPostSize int `json:"_max_messages_post_size"`
 
+	// Is message encryption enabled
+	EnableEncryptMessages bool `json:"_enable_encrypt_messages"`
+
 	// The flavor defined for the queue.
 	Flavor string `json:"flavor"`
 }
@@ -170,6 +172,18 @@ func (r QueuePage) NextPageURL() (string, error) {
 	return nextPageURL(r.URL.String(), next)
 }
 
+// GetCount value if it request was supplied `WithCount` param
+func (r QueuePage) GetCount() (int, error) {
+	var s struct {
+		Count int `json:"count"`
+	}
+	err := r.ExtractInto(&s)
+	if err != nil {
+		return 0, err
+	}
+	return s.Count, nil
+}
+
 func (r *QueueDetails) UnmarshalJSON(b []byte) error {
 	type tmp QueueDetails
 	var s struct {
@@ -193,7 +207,7 @@ func (r *QueueDetails) UnmarshalJSON(b []byte) error {
 			return err
 		}
 		if resultMap, ok := result.(map[string]interface{}); ok {
-			r.Extra = internal.RemainingKeys(QueueDetails{}, resultMap)
+			r.Extra = gophercloud.RemainingKeys(QueueDetails{}, resultMap)
 		}
 	}
 

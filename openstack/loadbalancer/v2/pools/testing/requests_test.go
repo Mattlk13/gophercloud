@@ -270,22 +270,25 @@ func TestBatchUpdateMembers(t *testing.T) {
 	defer th.TeardownHTTP()
 	HandleMembersUpdateSuccessfully(t)
 
+	name_1 := "web-server-1"
 	weight_1 := 20
+	subnetID := "bbb35f84-35cc-4b2f-84c2-a6a29bba68aa"
 	member1 := pools.BatchUpdateMemberOpts{
 		Address:      "192.0.2.16",
 		ProtocolPort: 80,
-		Name:         "web-server-1",
-		SubnetID:     "bbb35f84-35cc-4b2f-84c2-a6a29bba68aa",
+		Name:         &name_1,
+		SubnetID:     &subnetID,
 		Weight:       &weight_1,
 	}
 
+	name_2 := "web-server-2"
 	weight_2 := 10
 	member2 := pools.BatchUpdateMemberOpts{
 		Address:      "192.0.2.17",
 		ProtocolPort: 80,
-		Name:         "web-server-2",
+		Name:         &name_2,
 		Weight:       &weight_2,
-		SubnetID:     "bbb35f84-35cc-4b2f-84c2-a6a29bba68aa",
+		SubnetID:     &subnetID,
 	}
 	members := []pools.BatchUpdateMemberOpts{member1, member2}
 
@@ -293,13 +296,23 @@ func TestBatchUpdateMembers(t *testing.T) {
 	th.AssertNoErr(t, res.Err)
 }
 
+func TestEmptyBatchUpdateMembers(t *testing.T) {
+	th.SetupHTTP()
+	defer th.TeardownHTTP()
+	HandleEmptyMembersUpdateSuccessfully(t)
+
+	res := pools.BatchUpdateMembers(fake.ServiceClient(), "332abe93-f488-41ba-870b-2ac66be7f853", []pools.BatchUpdateMemberOpts{})
+	th.AssertNoErr(t, res.Err)
+}
+
 func TestRequiredBatchUpdateMemberOpts(t *testing.T) {
 	th.SetupHTTP()
 	defer th.TeardownHTTP()
 
+	name := "web-server-1"
 	res := pools.BatchUpdateMembers(fake.ServiceClient(), "332abe93-f488-41ba-870b-2ac66be7f853", []pools.BatchUpdateMemberOpts{
 		{
-			Name: "web-server-1",
+			Name: &name,
 		},
 	})
 	if res.Err == nil {
@@ -309,7 +322,7 @@ func TestRequiredBatchUpdateMemberOpts(t *testing.T) {
 	res = pools.BatchUpdateMembers(fake.ServiceClient(), "332abe93-f488-41ba-870b-2ac66be7f853", []pools.BatchUpdateMemberOpts{
 		{
 			Address: "192.0.2.17",
-			Name:    "web-server-1",
+			Name:    &name,
 		},
 	})
 	if res.Err == nil {
@@ -319,7 +332,7 @@ func TestRequiredBatchUpdateMemberOpts(t *testing.T) {
 	res = pools.BatchUpdateMembers(fake.ServiceClient(), "332abe93-f488-41ba-870b-2ac66be7f853", []pools.BatchUpdateMemberOpts{
 		{
 			ProtocolPort: 80,
-			Name:         "web-server-1",
+			Name:         &name,
 		},
 	})
 	if res.Err == nil {

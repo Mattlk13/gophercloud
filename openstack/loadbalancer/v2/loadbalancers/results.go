@@ -57,7 +57,10 @@ type LoadBalancer struct {
 	Name string `json:"name"`
 
 	// The UUID of a flavor if set.
-	Flavor string `json:"flavor"`
+	FlavorID string `json:"flavor_id"`
+
+	// The name of an Octavia availability zone if set.
+	AvailabilityZone string `json:"availability_zone"`
 
 	// The name of the provider.
 	Provider string `json:"provider"`

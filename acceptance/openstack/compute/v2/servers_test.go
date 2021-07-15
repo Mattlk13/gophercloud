@@ -8,6 +8,7 @@ import (
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/acceptance/clients"
+	networks "github.com/gophercloud/gophercloud/acceptance/openstack/networking/v2"
 	"github.com/gophercloud/gophercloud/acceptance/tools"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/attachinterfaces"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/availabilityzones"
@@ -17,8 +18,8 @@ import (
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/pauseunpause"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/serverusage"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/suspendresume"
+	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/tags"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/servers"
-	"github.com/gophercloud/gophercloud/openstack/networking/v2/networks"
 	th "github.com/gophercloud/gophercloud/testhelper"
 )
 
@@ -314,7 +315,7 @@ func TestServersActionRebuild(t *testing.T) {
 	rebuildOpts := servers.RebuildOpts{
 		Name:      tools.RandomString("ACPTTEST", 16),
 		AdminPass: tools.MakeNewPassword(server.AdminPass),
-		ImageID:   choices.ImageID,
+		ImageRef:  choices.ImageID,
 	}
 
 	rebuilt, err := servers.Rebuild(client, server.ID, rebuildOpts).Extract()
@@ -506,9 +507,60 @@ func TestServersTags(t *testing.T) {
 	networkID, err := networks.IDFromName(networkClient, choices.NetworkName)
 	th.AssertNoErr(t, err)
 
+	// Create server with tags.
 	server, err := CreateServerWithTags(t, client, networkID)
 	th.AssertNoErr(t, err)
 	defer DeleteServer(t, client, server)
+
+	// All the following calls should work with "2.26" microversion.
+	client.Microversion = "2.26"
+
+	// Check server tags in body.
+	serverWithTags, err := servers.Get(client, server.ID).Extract()
+	th.AssertNoErr(t, err)
+	th.AssertDeepEquals(t, []string{"tag1", "tag2"}, *serverWithTags.Tags)
+
+	// Check all tags.
+	allTags, err := tags.List(client, server.ID).Extract()
+	th.AssertNoErr(t, err)
+	th.AssertDeepEquals(t, []string{"tag1", "tag2"}, allTags)
+
+	// Check single tag.
+	exists, err := tags.Check(client, server.ID, "tag2").Extract()
+	th.AssertNoErr(t, err)
+	th.AssertEquals(t, true, exists)
+
+	// Add new tag.
+	newTags, err := tags.ReplaceAll(client, server.ID, tags.ReplaceAllOpts{Tags: []string{"tag3", "tag4"}}).Extract()
+	th.AssertNoErr(t, err)
+	th.AssertDeepEquals(t, []string{"tag3", "tag4"}, newTags)
+
+	// Add new single tag.
+	err = tags.Add(client, server.ID, "tag5").ExtractErr()
+	th.AssertNoErr(t, err)
+
+	// Check current tags.
+	newAllTags, err := tags.List(client, server.ID).Extract()
+	th.AssertNoErr(t, err)
+	th.AssertDeepEquals(t, []string{"tag3", "tag4", "tag5"}, newAllTags)
+
+	// Remove single tag.
+	err = tags.Delete(client, server.ID, "tag4").ExtractErr()
+	th.AssertNoErr(t, err)
+
+	// Check that tag doesn't exist anymore.
+	exists, err = tags.Check(client, server.ID, "tag4").Extract()
+	th.AssertNoErr(t, err)
+	th.AssertEquals(t, false, exists)
+
+	// Remove all tags.
+	err = tags.DeleteAll(client, server.ID).ExtractErr()
+	th.AssertNoErr(t, err)
+
+	// Check that there are no more tags.
+	currentTags, err := tags.List(client, server.ID).Extract()
+	th.AssertNoErr(t, err)
+	th.AssertEquals(t, 0, len(currentTags))
 }
 
 func TestServersWithExtendedAttributesCreateDestroy(t *testing.T) {
@@ -526,41 +578,80 @@ func TestServersWithExtendedAttributesCreateDestroy(t *testing.T) {
 	th.AssertNoErr(t, err)
 	defer DeleteServer(t, client, server)
 
-	result := servers.Get(client, server.ID)
-	th.AssertNoErr(t, result.Err)
+	type serverAttributesExt struct {
+		servers.Server
+		extendedserverattributes.ServerAttributesExt
+	}
+	var serverWithAttributesExt serverAttributesExt
 
-	reservationID, err := extendedserverattributes.ExtractReservationID(result.Result)
+	err = servers.Get(client, server.ID).ExtractInto(&serverWithAttributesExt)
 	th.AssertNoErr(t, err)
-	th.AssertEquals(t, reservationID != "", true)
-	t.Logf("reservationID: %s", reservationID)
 
-	launchIndex, err := extendedserverattributes.ExtractLaunchIndex(result.Result)
-	th.AssertNoErr(t, err)
-	th.AssertEquals(t, launchIndex, 0)
-	t.Logf("launchIndex: %d", launchIndex)
+	t.Logf("Server With Extended Attributes: %#v", serverWithAttributesExt)
 
-	ramdiskID, err := extendedserverattributes.ExtractRamdiskID(result.Result)
-	th.AssertNoErr(t, err)
-	th.AssertEquals(t, ramdiskID == "", true)
-	t.Logf("ramdiskID: %s", ramdiskID)
+	th.AssertEquals(t, *serverWithAttributesExt.ReservationID != "", true)
+	th.AssertEquals(t, *serverWithAttributesExt.LaunchIndex, 0)
+	th.AssertEquals(t, *serverWithAttributesExt.RAMDiskID == "", true)
+	th.AssertEquals(t, *serverWithAttributesExt.KernelID == "", true)
+	th.AssertEquals(t, *serverWithAttributesExt.Hostname != "", true)
+	th.AssertEquals(t, *serverWithAttributesExt.RootDeviceName != "", true)
+	th.AssertEquals(t, serverWithAttributesExt.Userdata == nil, true)
+}
 
-	kernelID, err := extendedserverattributes.ExtractKernelID(result.Result)
-	th.AssertNoErr(t, err)
-	th.AssertEquals(t, kernelID == "", true)
-	t.Logf("kernelID: %s", kernelID)
+func TestServerNoNetworkCreateDestroy(t *testing.T) {
+	clients.RequireLong(t)
 
-	hostname, err := extendedserverattributes.ExtractHostname(result.Result)
+	client, err := clients.NewComputeV2Client()
 	th.AssertNoErr(t, err)
-	th.AssertEquals(t, hostname != "", true)
-	t.Logf("hostname: %s", hostname)
 
-	rootDeviceName, err := extendedserverattributes.ExtractRootDeviceName(result.Result)
+	choices, err := clients.AcceptanceTestChoicesFromEnv()
 	th.AssertNoErr(t, err)
-	th.AssertEquals(t, rootDeviceName != "", true)
-	t.Logf("rootDeviceName: %s", rootDeviceName)
 
-	userData, err := extendedserverattributes.ExtractUserData(result.Result)
+	client.Microversion = "2.37"
+
+	server, err := CreateServerNoNetwork(t, client)
 	th.AssertNoErr(t, err)
-	th.AssertEquals(t, userData == "", true)
-	t.Logf("userData: %s", userData)
+	defer DeleteServer(t, client, server)
+
+	allPages, err := servers.List(client, servers.ListOpts{}).AllPages()
+	th.AssertNoErr(t, err)
+
+	allServers, err := servers.ExtractServers(allPages)
+	th.AssertNoErr(t, err)
+
+	var found bool
+	for _, s := range allServers {
+		tools.PrintResource(t, server)
+
+		if s.ID == server.ID {
+			found = true
+		}
+	}
+
+	th.AssertEquals(t, found, true)
+
+	allAddressPages, err := servers.ListAddresses(client, server.ID).AllPages()
+	th.AssertNoErr(t, err)
+
+	allAddresses, err := servers.ExtractAddresses(allAddressPages)
+	th.AssertNoErr(t, err)
+
+	for network, address := range allAddresses {
+		t.Logf("Addresses on %s: %+v", network, address)
+	}
+
+	allInterfacePages, err := attachinterfaces.List(client, server.ID).AllPages()
+	th.AssertNoErr(t, err)
+
+	allInterfaces, err := attachinterfaces.ExtractInterfaces(allInterfacePages)
+	th.AssertNoErr(t, err)
+
+	for _, iface := range allInterfaces {
+		t.Logf("Interfaces: %+v", iface)
+	}
+
+	_, err = servers.ListAddressesByNetwork(client, server.ID, choices.NetworkName).AllPages()
+	if err == nil {
+		t.Fatalf("Instance must not be a member of specified network")
+	}
 }

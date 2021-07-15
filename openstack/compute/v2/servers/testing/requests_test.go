@@ -100,6 +100,22 @@ func TestCreateServer(t *testing.T) {
 	th.CheckDeepEquals(t, ServerDerp, *actual)
 }
 
+func TestCreateServerNoNetwork(t *testing.T) {
+	th.SetupHTTP()
+	defer th.TeardownHTTP()
+	HandleServerNoNetworkCreationSuccessfully(t, SingleServerBody)
+
+	actual, err := servers.Create(client.ServiceClient(), servers.CreateOpts{
+		Name:      "derp",
+		ImageRef:  "f90f6034-2570-4974-8351-6b49732ef2eb",
+		FlavorRef: "1",
+		Networks:  "none",
+	}).Extract()
+	th.AssertNoErr(t, err)
+
+	th.CheckDeepEquals(t, ServerDerp, *actual)
+}
+
 func TestCreateServers(t *testing.T) {
 	th.SetupHTTP()
 	defer th.TeardownHTTP()
@@ -181,22 +197,6 @@ func TestCreateServerWithUserdataEncoded(t *testing.T) {
 		ImageRef:  "f90f6034-2570-4974-8351-6b49732ef2eb",
 		FlavorRef: "1",
 		UserData:  []byte(encoded),
-	}).Extract()
-	th.AssertNoErr(t, err)
-
-	th.CheckDeepEquals(t, ServerDerp, *actual)
-}
-
-func TestCreateServerWithImageNameAndFlavorName(t *testing.T) {
-	th.SetupHTTP()
-	defer th.TeardownHTTP()
-	HandleServerCreationSuccessfully(t, SingleServerBody)
-
-	actual, err := servers.Create(client.ServiceClient(), servers.CreateOpts{
-		Name:          "derp",
-		ImageName:     "cirros-0.3.2-x86_64-disk",
-		FlavorName:    "m1.tiny",
-		ServiceClient: client.ServiceClient(),
 	}).Extract()
 	th.AssertNoErr(t, err)
 
@@ -342,7 +342,7 @@ func TestRebuildServer(t *testing.T) {
 	opts := servers.RebuildOpts{
 		Name:       "new-name",
 		AdminPass:  "swordfish",
-		ImageID:    "http://104.130.131.164:8774/fcad67a6189847c4aecfa3c81a05783b/images/f90f6034-2570-4974-8351-6b49732ef2eb",
+		ImageRef:   "f90f6034-2570-4974-8351-6b49732ef2eb",
 		AccessIPv4: "1.2.3.4",
 	}
 
@@ -577,6 +577,9 @@ func TestCreateServerWithTags(t *testing.T) {
 	c.Microversion = "2.52"
 
 	tags := []string{"foo", "bar"}
+	ServerDerpTags := ServerDerp
+	ServerDerpTags.Tags = &tags
+
 	createOpts := servers.CreateOpts{
 		Name:      "derp",
 		ImageRef:  "f90f6034-2570-4974-8351-6b49732ef2eb",
@@ -587,9 +590,5 @@ func TestCreateServerWithTags(t *testing.T) {
 	th.AssertNoErr(t, res.Err)
 	actualServer, err := res.Extract()
 	th.AssertNoErr(t, err)
-	th.CheckDeepEquals(t, ServerDerp, *actualServer)
-
-	actualTags, err := res.ExtractTags()
-	th.AssertNoErr(t, err)
-	th.CheckDeepEquals(t, tags, actualTags)
+	th.CheckDeepEquals(t, ServerDerpTags, *actualServer)
 }

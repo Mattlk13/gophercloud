@@ -88,7 +88,7 @@ func CreatePort(t *testing.T, client *gophercloud.ServiceClient, networkID, subn
 		Name:         portName,
 		Description:  portDescription,
 		AdminStateUp: gophercloud.Enabled,
-		FixedIPs:     []ports.IP{ports.IP{SubnetID: subnetID}},
+		FixedIPs:     []ports.IP{{SubnetID: subnetID}},
 	}
 
 	port, err := ports.Create(client, createOpts).Extract()
@@ -96,7 +96,7 @@ func CreatePort(t *testing.T, client *gophercloud.ServiceClient, networkID, subn
 		return port, err
 	}
 
-	if err := WaitForPortToCreate(client, port.ID, 60); err != nil {
+	if err := WaitForPortToCreate(client, port.ID); err != nil {
 		return port, err
 	}
 
@@ -125,7 +125,7 @@ func CreatePortWithNoSecurityGroup(t *testing.T, client *gophercloud.ServiceClie
 		NetworkID:      networkID,
 		Name:           portName,
 		AdminStateUp:   &iFalse,
-		FixedIPs:       []ports.IP{ports.IP{SubnetID: subnetID}},
+		FixedIPs:       []ports.IP{{SubnetID: subnetID}},
 		SecurityGroups: &[]string{},
 	}
 
@@ -134,7 +134,7 @@ func CreatePortWithNoSecurityGroup(t *testing.T, client *gophercloud.ServiceClie
 		return port, err
 	}
 
-	if err := WaitForPortToCreate(client, port.ID, 60); err != nil {
+	if err := WaitForPortToCreate(client, port.ID); err != nil {
 		return port, err
 	}
 
@@ -161,7 +161,7 @@ func CreatePortWithoutPortSecurity(t *testing.T, client *gophercloud.ServiceClie
 		NetworkID:    networkID,
 		Name:         portName,
 		AdminStateUp: gophercloud.Enabled,
-		FixedIPs:     []ports.IP{ports.IP{SubnetID: subnetID}},
+		FixedIPs:     []ports.IP{{SubnetID: subnetID}},
 	}
 
 	iFalse := false
@@ -175,7 +175,7 @@ func CreatePortWithoutPortSecurity(t *testing.T, client *gophercloud.ServiceClie
 		return port, err
 	}
 
-	if err := WaitForPortToCreate(client, port.ID, 60); err != nil {
+	if err := WaitForPortToCreate(client, port.ID); err != nil {
 		return port, err
 	}
 
@@ -202,7 +202,7 @@ func CreatePortWithExtraDHCPOpts(t *testing.T, client *gophercloud.ServiceClient
 		NetworkID:    networkID,
 		Name:         portName,
 		AdminStateUp: gophercloud.Enabled,
-		FixedIPs:     []ports.IP{ports.IP{SubnetID: subnetID}},
+		FixedIPs:     []ports.IP{{SubnetID: subnetID}},
 	}
 
 	createOpts := extradhcpopts.CreateOptsExt{
@@ -221,7 +221,7 @@ func CreatePortWithExtraDHCPOpts(t *testing.T, client *gophercloud.ServiceClient
 		return nil, err
 	}
 
-	if err := WaitForPortToCreate(client, port.ID, 60); err != nil {
+	if err := WaitForPortToCreate(client, port.ID); err != nil {
 		return nil, err
 	}
 
@@ -248,7 +248,7 @@ func CreatePortWithMultipleFixedIPs(t *testing.T, client *gophercloud.ServiceCli
 		Name:         portName,
 		Description:  portDescription,
 		AdminStateUp: gophercloud.Enabled,
-		FixedIPs:     []ports.IP{ports.IP{SubnetID: subnetID}, ports.IP{SubnetID: subnetID}},
+		FixedIPs:     []ports.IP{{SubnetID: subnetID}, {SubnetID: subnetID}},
 	}
 
 	port, err := ports.Create(client, createOpts).Extract()
@@ -256,7 +256,7 @@ func CreatePortWithMultipleFixedIPs(t *testing.T, client *gophercloud.ServiceCli
 		return port, err
 	}
 
-	if err := WaitForPortToCreate(client, port.ID, 60); err != nil {
+	if err := WaitForPortToCreate(client, port.ID); err != nil {
 		return port, err
 	}
 
@@ -514,8 +514,8 @@ func DeleteSubnet(t *testing.T, client *gophercloud.ServiceClient, subnetID stri
 	t.Logf("Deleted subnet: %s", subnetID)
 }
 
-func WaitForPortToCreate(client *gophercloud.ServiceClient, portID string, secs int) error {
-	return gophercloud.WaitFor(secs, func() (bool, error) {
+func WaitForPortToCreate(client *gophercloud.ServiceClient, portID string) error {
+	return tools.WaitFor(func() (bool, error) {
 		p, err := ports.Get(client, portID).Extract()
 		if err != nil {
 			return false, err
@@ -527,4 +527,42 @@ func WaitForPortToCreate(client *gophercloud.ServiceClient, portID string, secs 
 
 		return false, nil
 	})
+}
+
+// This is duplicated from https://github.com/gophercloud/utils
+// so that Gophercloud "core" doesn't have a dependency on the
+// complementary utils repository.
+func IDFromName(client *gophercloud.ServiceClient, name string) (string, error) {
+	count := 0
+	id := ""
+
+	listOpts := networks.ListOpts{
+		Name: name,
+	}
+
+	pages, err := networks.List(client, listOpts).AllPages()
+	if err != nil {
+		return "", err
+	}
+
+	all, err := networks.ExtractNetworks(pages)
+	if err != nil {
+		return "", err
+	}
+
+	for _, s := range all {
+		if s.Name == name {
+			count++
+			id = s.ID
+		}
+	}
+
+	switch count {
+	case 0:
+		return "", gophercloud.ErrResourceNotFound{Name: name, ResourceType: "network"}
+	case 1:
+		return id, nil
+	default:
+		return "", gophercloud.ErrMultipleResourcesFound{Name: name, Count: count, ResourceType: "network"}
+	}
 }

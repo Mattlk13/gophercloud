@@ -22,6 +22,7 @@ const CreateQueueRequest = `
     "_dead_letter_queue": "dead_letter",
     "_dead_letter_queue_messages_ttl": 3600,
     "_max_claim_count": 10,
+    "_enable_encrypt_messages": false,
     "description": "Queue for unit testing."
 }`
 
@@ -53,6 +54,7 @@ const ListQueuesResponse1 = `
                 "_default_message_ttl":3700,
                 "_max_claim_count":10,
                 "_max_messages_post_size":262143,
+                "_enable_encrypt_messages":true,
                 "description":"Test queue."
             }
         }
@@ -62,7 +64,8 @@ const ListQueuesResponse1 = `
             "href":"/v2/queues?marker=london",
             "rel":"next"
         }
-    ]
+	],
+	"count": 2
 }`
 
 // ListQueuesResponse2 is a sample response to a List queues.
@@ -88,7 +91,8 @@ const ListQueuesResponse2 = `
             "href":"/v2/queues?marker=beijing",
             "rel":"next"
         }
-    ]
+	],
+	"count": 2
 }`
 
 // UpdateQueueRequest is a sample request to update a queue.
@@ -155,6 +159,7 @@ var FirstQueue = queues.Queue{
 		DefaultMessageTTL:         3700,
 		MaxClaimCount:             10,
 		MaxMessagesPostSize:       262143,
+		EnableEncryptMessages:     true,
 		Extra:                     map[string]interface{}{"description": "Test queue."},
 	},
 }
@@ -220,7 +225,7 @@ func HandleListSuccessfully(t *testing.T) {
 			next := r.RequestURI
 
 			switch next {
-			case "/v2/queues?limit=1":
+			case "/v2/queues?limit=1&with_count=true":
 				fmt.Fprintf(w, ListQueuesResponse1)
 			case "/v2/queues?marker=london":
 				fmt.Fprint(w, ListQueuesResponse2)

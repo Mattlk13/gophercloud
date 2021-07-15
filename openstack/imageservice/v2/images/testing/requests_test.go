@@ -173,6 +173,14 @@ func TestCreateImageNulls(t *testing.T) {
 		Schema:     schema,
 		Properties: properties,
 		SizeBytes:  sizeBytes,
+		OpenStackImageImportMethods: []string{
+			"glance-direct",
+			"web-download",
+		},
+		OpenStackImageStoreIDs: []string{
+			"123",
+			"456",
+		},
 	}
 
 	th.AssertDeepEquals(t, &expectedImage, actualImage)
@@ -217,6 +225,7 @@ func TestGetImage(t *testing.T) {
 
 		Protected:  false,
 		Visibility: images.ImageVisibilityPublic,
+		Hidden:     false,
 
 		Checksum:    checksum,
 		SizeBytes:   sizeBytes,
@@ -255,6 +264,13 @@ func TestUpdateImage(t *testing.T) {
 		images.ReplaceImageName{NewName: "Fedora 17"},
 		images.ReplaceImageTags{NewTags: []string{"fedora", "beefy"}},
 		images.ReplaceImageMinDisk{NewMinDisk: 21},
+		images.ReplaceImageMinRam{NewMinRam: 1024},
+		images.ReplaceImageHidden{NewHidden: false},
+		images.UpdateImageProperty{
+			Op:    images.AddOp,
+			Name:  "empty_value",
+			Value: "",
+		},
 	}).Extract()
 
 	th.AssertNoErr(t, err)
@@ -271,6 +287,7 @@ func TestUpdateImage(t *testing.T) {
 		Name:       "Fedora 17",
 		Status:     images.ImageStatusActive,
 		Visibility: images.ImageVisibilityPublic,
+		Hidden:     false,
 
 		SizeBytes: sizebytes,
 		Checksum:  checksum,
@@ -281,7 +298,7 @@ func TestUpdateImage(t *testing.T) {
 		},
 
 		Owner:            "",
-		MinRAMMegabytes:  0,
+		MinRAMMegabytes:  1024,
 		MinDiskGigabytes: 21,
 
 		DiskFormat:      "",
@@ -295,6 +312,7 @@ func TestUpdateImage(t *testing.T) {
 			"hw_disk_bus":       "scsi",
 			"hw_disk_bus_model": "virtio-scsi",
 			"hw_scsi_model":     "virtio-scsi",
+			"empty_value":       "",
 		},
 	}
 

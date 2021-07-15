@@ -7,6 +7,7 @@ import (
 	networking "github.com/gophercloud/gophercloud/acceptance/openstack/networking/v2"
 	"github.com/gophercloud/gophercloud/acceptance/tools"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/layer3/floatingips"
+	"github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/layer3/portforwarding"
 	th "github.com/gophercloud/gophercloud/testhelper"
 )
 
@@ -54,5 +55,35 @@ func TestLayer3PortForwardingsCreateDelete(t *testing.T) {
 	th.AssertNoErr(t, err)
 	defer DeletePortForwarding(t, client, fip.ID, pf.ID)
 	tools.PrintResource(t, pf)
+
+	newPf, err := portforwarding.Get(client, fip.ID, pf.ID).Extract()
+	th.AssertNoErr(t, err)
+
+	updateOpts := portforwarding.UpdateOpts{
+		Protocol:     "udp",
+		InternalPort: 30,
+		ExternalPort: 678,
+	}
+
+	_, err = portforwarding.Update(client, fip.ID, newPf.ID, updateOpts).Extract()
+	th.AssertNoErr(t, err)
+
+	newPf, err = portforwarding.Get(client, fip.ID, pf.ID).Extract()
+	th.AssertNoErr(t, err)
+
+	allPages, err := portforwarding.List(client, portforwarding.ListOpts{}, fip.ID).AllPages()
+	th.AssertNoErr(t, err)
+
+	allPFs, err := portforwarding.ExtractPortForwardings(allPages)
+	th.AssertNoErr(t, err)
+
+	var found bool
+	for _, pf := range allPFs {
+		if pf.ID == newPf.ID {
+			found = true
+		}
+	}
+
+	th.AssertEquals(t, true, found)
 
 }

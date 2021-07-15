@@ -78,7 +78,7 @@ func TestContainers(t *testing.T) {
 	// After the tests are done, delete the metadata that was set.
 	defer func() {
 		temp := []string{}
-		for k, _ := range metadata {
+		for k := range metadata {
 			temp = append(temp, k)
 		}
 		res := containers.Update(client, cNames[0], &containers.UpdateOpts{RemoveMetadata: temp})
@@ -91,7 +91,7 @@ func TestContainers(t *testing.T) {
 
 		cm, err := containers.Get(client, cNames[0], getOpts).ExtractMetadata()
 		th.AssertNoErr(t, err)
-		for k, _ := range metadata {
+		for k := range metadata {
 			if _, ok := cm[k]; ok {
 				t.Errorf("Unexpected custom metadata with key: %s", k)
 			}
@@ -110,6 +110,11 @@ func TestContainers(t *testing.T) {
 			t.Errorf("Expected custom metadata with key: %s", k)
 		}
 	}
+
+	// Retrieve a container's timestamp
+	cHeaders, err := containers.Get(client, cNames[0], getOpts).Extract()
+	th.AssertNoErr(t, err)
+	t.Logf("Container: Name [%s] Timestamp: [%f]\n", cNames[0], cHeaders.Timestamp)
 }
 
 func TestListAllContainers(t *testing.T) {
@@ -160,4 +165,41 @@ func TestListAllContainers(t *testing.T) {
 		t.Logf("Container: Name [%s]", n)
 	}
 	th.AssertEquals(t, numContainers, len(containerNamesList))
+}
+
+func TestBulkDeleteContainers(t *testing.T) {
+	client, err := clients.NewObjectStorageV1Client()
+	if err != nil {
+		t.Fatalf("Unable to create client: %v", err)
+	}
+
+	numContainers := 20
+
+	// Create a slice of random container names.
+	cNames := make([]string, numContainers)
+	for i := 0; i < numContainers; i++ {
+		cNames[i] = tools.RandomString("gophercloud-test-container-", 8)
+	}
+
+	// Create numContainers containers.
+	for i := 0; i < len(cNames); i++ {
+		res := containers.Create(client, cNames[i], nil)
+		th.AssertNoErr(t, res.Err)
+	}
+
+	expectedResp := containers.BulkDeleteResponse{
+		ResponseStatus: "200 OK",
+		Errors:         [][]string{},
+		NumberDeleted:  numContainers,
+	}
+
+	resp, err := containers.BulkDelete(client, cNames).Extract()
+	th.AssertNoErr(t, err)
+	tools.PrintResource(t, *resp)
+	th.AssertDeepEquals(t, *resp, expectedResp)
+
+	for _, c := range cNames {
+		_, err = containers.Get(client, c, nil).Extract()
+		th.AssertErr(t, err)
+	}
 }

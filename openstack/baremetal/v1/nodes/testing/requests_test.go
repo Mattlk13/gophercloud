@@ -254,6 +254,29 @@ func TestNodeChangeProvisionStateActive(t *testing.T) {
 	th.AssertNoErr(t, err)
 }
 
+func TestNodeChangeProvisionStateActiveWithSteps(t *testing.T) {
+	th.SetupHTTP()
+	defer th.TeardownHTTP()
+	HandleNodeChangeProvisionStateActiveWithSteps(t)
+
+	c := client.ServiceClient()
+	err := nodes.ChangeProvisionState(c, "1234asdf", nodes.ProvisionStateOpts{
+		Target: nodes.TargetActive,
+		DeploySteps: []nodes.DeployStep{
+			{
+				Interface: nodes.InterfaceDeploy,
+				Step:      "inject_files",
+				Priority:  50,
+				Args: map[string]interface{}{
+					"files": []interface{}{},
+				},
+			},
+		},
+	}).ExtractErr()
+
+	th.AssertNoErr(t, err)
+}
+
 func TestHandleNodeChangeProvisionStateConfigDrive(t *testing.T) {
 	th.SetupHTTP()
 	defer th.TeardownHTTP()
@@ -280,7 +303,7 @@ func TestNodeChangeProvisionStateClean(t *testing.T) {
 		Target: nodes.TargetClean,
 		CleanSteps: []nodes.CleanStep{
 			{
-				Interface: "deploy",
+				Interface: nodes.InterfaceDeploy,
 				Step:      "upgrade_firmware",
 				Args: map[string]interface{}{
 					"force": "True",
@@ -302,7 +325,7 @@ func TestNodeChangeProvisionStateCleanWithConflict(t *testing.T) {
 		Target: nodes.TargetClean,
 		CleanSteps: []nodes.CleanStep{
 			{
-				Interface: "deploy",
+				Interface: nodes.InterfaceDeploy,
 				Step:      "upgrade_firmware",
 				Args: map[string]interface{}{
 					"force": "True",
@@ -341,7 +364,7 @@ func TestCleanStepRequiresStep(t *testing.T) {
 		Target: nodes.TargetClean,
 		CleanSteps: []nodes.CleanStep{
 			{
-				Interface: "deploy",
+				Interface: nodes.InterfaceDeploy,
 				Args: map[string]interface{}{
 					"force": "True",
 				},
@@ -429,4 +452,144 @@ func TestSetRAIDConfigMaxSize(t *testing.T) {
 	c := client.ServiceClient()
 	err := nodes.SetRAIDConfig(c, "1234asdf", config).ExtractErr()
 	th.AssertNoErr(t, err)
+}
+
+func TestToRAIDConfigMap(t *testing.T) {
+	cases := []struct {
+		name     string
+		opts     nodes.RAIDConfigOpts
+		expected map[string]interface{}
+	}{
+		{
+			name: "LogicalDisks is empty",
+			opts: nodes.RAIDConfigOpts{},
+			expected: map[string]interface{}{
+				"logical_disks": nil,
+			},
+		},
+		{
+			name: "LogicalDisks is nil",
+			opts: nodes.RAIDConfigOpts{
+				LogicalDisks: nil,
+			},
+			expected: map[string]interface{}{
+				"logical_disks": nil,
+			},
+		},
+		{
+			name: "PhysicalDisks is []string",
+			opts: nodes.RAIDConfigOpts{
+				LogicalDisks: []nodes.LogicalDisk{
+					{
+						RAIDLevel:     "0",
+						VolumeName:    "root",
+						PhysicalDisks: []interface{}{"6I:1:5", "6I:1:6", "6I:1:7"},
+					},
+				},
+			},
+			expected: map[string]interface{}{
+				"logical_disks": []map[string]interface{}{
+					{
+						"raid_level":     "0",
+						"size_gb":        "MAX",
+						"volume_name":    "root",
+						"physical_disks": []interface{}{"6I:1:5", "6I:1:6", "6I:1:7"},
+					},
+				},
+			},
+		},
+		{
+			name: "PhysicalDisks is []map[string]string",
+			opts: nodes.RAIDConfigOpts{
+				LogicalDisks: []nodes.LogicalDisk{
+					{
+						RAIDLevel:  "0",
+						VolumeName: "root",
+						Controller: "software",
+						PhysicalDisks: []interface{}{
+							map[string]string{
+								"size": "> 100",
+							},
+							map[string]string{
+								"size": "> 100",
+							},
+						},
+					},
+				},
+			},
+			expected: map[string]interface{}{
+				"logical_disks": []map[string]interface{}{
+					{
+						"raid_level":  "0",
+						"size_gb":     "MAX",
+						"volume_name": "root",
+						"controller":  "software",
+						"physical_disks": []interface{}{
+							map[string]interface{}{
+								"size": "> 100",
+							},
+							map[string]interface{}{
+								"size": "> 100",
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got, _ := c.opts.ToRAIDConfigMap()
+			th.CheckDeepEquals(t, c.expected, got)
+		})
+	}
+}
+
+func TestListBIOSSettings(t *testing.T) {
+	th.SetupHTTP()
+	defer th.TeardownHTTP()
+	HandleListBIOSSettingsSuccessfully(t)
+
+	c := client.ServiceClient()
+	actual, err := nodes.ListBIOSSettings(c, "1234asdf", nil).Extract()
+	th.AssertNoErr(t, err)
+	th.CheckDeepEquals(t, NodeBIOSSettings, actual)
+}
+
+func TestListDetailBIOSSettings(t *testing.T) {
+	th.SetupHTTP()
+	defer th.TeardownHTTP()
+	HandleListDetailBIOSSettingsSuccessfully(t)
+
+	opts := nodes.ListBIOSSettingsOpts{
+		Detail: true,
+	}
+
+	c := client.ServiceClient()
+	actual, err := nodes.ListBIOSSettings(c, "1234asdf", opts).Extract()
+	th.AssertNoErr(t, err)
+	th.CheckDeepEquals(t, NodeDetailBIOSSettings, actual)
+}
+
+func TestGetBIOSSetting(t *testing.T) {
+	th.SetupHTTP()
+	defer th.TeardownHTTP()
+	HandleGetBIOSSettingSuccessfully(t)
+
+	c := client.ServiceClient()
+	actual, err := nodes.GetBIOSSetting(c, "1234asdf", "ProcVirtualization").Extract()
+	th.AssertNoErr(t, err)
+	th.CheckDeepEquals(t, NodeSingleBIOSSetting, *actual)
+}
+
+func TestListBIOSSettingsOpts(t *testing.T) {
+	// Detail cannot take Fields
+	opts := nodes.ListBIOSSettingsOpts{
+		Detail: true,
+		Fields: []string{"name", "value"},
+	}
+
+	_, err := opts.ToListBIOSSettingsOptsQuery()
+	th.AssertEquals(t, err.Error(), "cannot have both fields and detail options for BIOS settings")
 }

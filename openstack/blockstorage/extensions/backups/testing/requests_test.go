@@ -1,6 +1,7 @@
 package testing
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -18,7 +19,47 @@ func TestList(t *testing.T) {
 
 	count := 0
 
-	backups.List(client.ServiceClient(), &backups.ListOpts{}).EachPage(func(page pagination.Page) (bool, error) {
+	err := backups.List(client.ServiceClient(), &backups.ListOpts{}).EachPage(func(page pagination.Page) (bool, error) {
+		count++
+		actual, err := backups.ExtractBackups(page)
+		if err != nil {
+			t.Errorf("Failed to extract backups: %v", err)
+			return false, err
+		}
+
+		expected := []backups.Backup{
+			{
+				ID:   "289da7f8-6440-407c-9fb4-7db01ec49164",
+				Name: "backup-001",
+			},
+			{
+				ID:   "96c3bda7-c82a-4f50-be73-ca7621794835",
+				Name: "backup-002",
+			},
+		}
+
+		th.CheckDeepEquals(t, expected, actual)
+
+		return true, nil
+	})
+	if err != nil {
+		t.Errorf("EachPage returned error: %s", err)
+	}
+
+	if count != 1 {
+		t.Errorf("Expected 1 page, got %d", count)
+	}
+}
+
+func TestListDetail(t *testing.T) {
+	th.SetupHTTP()
+	defer th.TeardownHTTP()
+
+	MockListDetailResponse(t)
+
+	count := 0
+
+	err := backups.ListDetail(client.ServiceClient(), &backups.ListDetailOpts{}).EachPage(func(page pagination.Page) (bool, error) {
 		count++
 		actual, err := backups.ExtractBackups(page)
 		if err != nil {
@@ -51,6 +92,9 @@ func TestList(t *testing.T) {
 
 		return true, nil
 	})
+	if err != nil {
+		t.Errorf("EachPage returned error: %s", err)
+	}
 
 	if count != 1 {
 		t.Errorf("Expected 1 page, got %d", count)
@@ -85,6 +129,21 @@ func TestCreate(t *testing.T) {
 	th.AssertEquals(t, n.ID, "d32019d3-bc6e-4319-9c1d-6722fc136a22")
 }
 
+func TestRestore(t *testing.T) {
+	th.SetupHTTP()
+	defer th.TeardownHTTP()
+
+	MockRestoreResponse(t)
+
+	options := backups.RestoreOpts{VolumeID: "1234", Name: "vol-001"}
+	n, err := backups.RestoreFromBackup(client.ServiceClient(), "d32019d3-bc6e-4319-9c1d-6722fc136a22", options).Extract()
+	th.AssertNoErr(t, err)
+
+	th.AssertEquals(t, n.VolumeID, "1234")
+	th.AssertEquals(t, n.VolumeName, "vol-001")
+	th.AssertEquals(t, n.BackupID, "d32019d3-bc6e-4319-9c1d-6722fc136a22")
+}
+
 func TestDelete(t *testing.T) {
 	th.SetupHTTP()
 	defer th.TeardownHTTP()
@@ -93,4 +152,38 @@ func TestDelete(t *testing.T) {
 
 	res := backups.Delete(client.ServiceClient(), "d32019d3-bc6e-4319-9c1d-6722fc136a22")
 	th.AssertNoErr(t, res.Err)
+}
+
+func TestExport(t *testing.T) {
+	th.SetupHTTP()
+	defer th.TeardownHTTP()
+
+	MockExportResponse(t)
+
+	n, err := backups.Export(client.ServiceClient(), "d32019d3-bc6e-4319-9c1d-6722fc136a22").Extract()
+	th.AssertNoErr(t, err)
+
+	th.AssertEquals(t, n.BackupService, "cinder.backup.drivers.swift.SwiftBackupDriver")
+	th.AssertDeepEquals(t, n.BackupURL, backupURL)
+
+	tmp := backups.ImportBackup{}
+	err = json.Unmarshal(backupURL, &tmp)
+	th.AssertNoErr(t, err)
+	th.AssertDeepEquals(t, tmp, backupImport)
+}
+
+func TestImport(t *testing.T) {
+	th.SetupHTTP()
+	defer th.TeardownHTTP()
+
+	MockImportResponse(t)
+
+	options := backups.ImportOpts{
+		BackupService: "cinder.backup.drivers.swift.SwiftBackupDriver",
+		BackupURL:     backupURL,
+	}
+	n, err := backups.Import(client.ServiceClient(), options).Extract()
+	th.AssertNoErr(t, err)
+
+	th.AssertEquals(t, n.ID, "d32019d3-bc6e-4319-9c1d-6722fc136a22")
 }

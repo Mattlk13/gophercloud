@@ -4,6 +4,8 @@
 package extensions
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/gophercloud/gophercloud"
@@ -11,6 +13,8 @@ import (
 	"github.com/gophercloud/gophercloud/openstack/blockstorage/extensions/backups"
 	"github.com/gophercloud/gophercloud/openstack/blockstorage/extensions/volumeactions"
 	"github.com/gophercloud/gophercloud/openstack/blockstorage/v2/volumes"
+	v3 "github.com/gophercloud/gophercloud/openstack/blockstorage/v3/volumes"
+	"github.com/gophercloud/gophercloud/openstack/blockstorage/v3/volumetypes"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/images"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/servers"
 	th "github.com/gophercloud/gophercloud/testhelper"
@@ -48,21 +52,14 @@ func CreateUploadImage(t *testing.T, client *gophercloud.ServiceClient, volume *
 
 // DeleteUploadedImage deletes uploaded image. An error will be returned
 // if the deletion request failed.
-func DeleteUploadedImage(t *testing.T, client *gophercloud.ServiceClient, imageName string) error {
+func DeleteUploadedImage(t *testing.T, client *gophercloud.ServiceClient, imageID string) error {
 	if testing.Short() {
 		t.Skip("Skipping test that requires volume-backed image removing in short mode.")
 	}
 
-	t.Logf("Getting image id for image name %s", imageName)
-
-	imageID, err := images.IDFromName(client, imageName)
-	if err != nil {
-		return err
-	}
-
 	t.Logf("Removing image %s", imageID)
 
-	err = images.Delete(client, imageID).ExtractErr()
+	err := images.Delete(client, imageID).ExtractErr()
 	if err != nil {
 		return err
 	}
@@ -208,7 +205,7 @@ func CreateBackup(t *testing.T, client *gophercloud.ServiceClient, volumeID stri
 		return nil, err
 	}
 
-	err = WaitForBackupStatus(client, backup.ID, "available", 120)
+	err = WaitForBackupStatus(client, backup.ID, "available")
 	if err != nil {
 		return nil, err
 	}
@@ -238,8 +235,8 @@ func DeleteBackup(t *testing.T, client *gophercloud.ServiceClient, backupID stri
 
 // WaitForBackupStatus will continually poll a backup, checking for a particular
 // status. It will do this for the amount of seconds defined.
-func WaitForBackupStatus(client *gophercloud.ServiceClient, id, status string, secs int) error {
-	return gophercloud.WaitFor(secs, func() (bool, error) {
+func WaitForBackupStatus(client *gophercloud.ServiceClient, id, status string) error {
+	return tools.WaitFor(func() (bool, error) {
 		current, err := backups.Get(client, id).Extract()
 		if err != nil {
 			return false, err
@@ -251,4 +248,68 @@ func WaitForBackupStatus(client *gophercloud.ServiceClient, id, status string, s
 
 		return false, nil
 	})
+}
+
+// SetBootable will set a bootable status to a volume.
+func SetBootable(t *testing.T, client *gophercloud.ServiceClient, volume *volumes.Volume) error {
+	t.Logf("Attempting to apply bootable status to volume %s", volume.ID)
+
+	bootableOpts := volumeactions.BootableOpts{
+		Bootable: true,
+	}
+
+	err := volumeactions.SetBootable(client, volume.ID, bootableOpts).ExtractErr()
+	if err != nil {
+		return err
+	}
+
+	vol, err := v3.Get(client, volume.ID).Extract()
+	if err != nil {
+		return err
+	}
+
+	if strings.ToLower(vol.Bootable) != "true" {
+		return fmt.Errorf("Volume bootable status is %q, expected 'true'", vol.Bootable)
+	}
+
+	bootableOpts = volumeactions.BootableOpts{
+		Bootable: false,
+	}
+
+	err = volumeactions.SetBootable(client, volume.ID, bootableOpts).ExtractErr()
+	if err != nil {
+		return err
+	}
+
+	vol, err = v3.Get(client, volume.ID).Extract()
+	if err != nil {
+		return err
+	}
+
+	if strings.ToLower(vol.Bootable) == "true" {
+		return fmt.Errorf("Volume bootable status is %q, expected 'false'", vol.Bootable)
+	}
+
+	return nil
+}
+
+// ChangeVolumeType will extend the size of a volume.
+func ChangeVolumeType(t *testing.T, client *gophercloud.ServiceClient, volume *v3.Volume, vt *volumetypes.VolumeType) error {
+	t.Logf("Attempting to change the type of volume %s from %s to %s", volume.ID, volume.VolumeType, vt.Name)
+
+	changeOpts := volumeactions.ChangeTypeOpts{
+		NewType:         vt.Name,
+		MigrationPolicy: volumeactions.MigrationPolicyOnDemand,
+	}
+
+	err := volumeactions.ChangeType(client, volume.ID, changeOpts).ExtractErr()
+	if err != nil {
+		return err
+	}
+
+	if err := volumes.WaitForStatus(client, volume.ID, "available", 60); err != nil {
+		return err
+	}
+
+	return nil
 }

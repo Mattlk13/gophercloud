@@ -4,10 +4,13 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -100,6 +103,7 @@ func TestConcurrentReauth(t *testing.T) {
 
 	wg := new(sync.WaitGroup)
 	reqopts := new(gophercloud.RequestOpts)
+	reqopts.KeepResponseBody = true
 	reqopts.MoreHeaders = map[string]string{
 		"X-Auth-Token": prereauthTok,
 	}
@@ -277,6 +281,7 @@ func TestRequestThatCameDuringReauthWaitsUntilItIsCompleted(t *testing.T) {
 
 	wg := new(sync.WaitGroup)
 	reqopts := new(gophercloud.RequestOpts)
+	reqopts.KeepResponseBody = true
 	reqopts.MoreHeaders = map[string]string{
 		"X-Auth-Token": prereauthTok,
 	}
@@ -314,6 +319,55 @@ func TestRequestThatCameDuringReauthWaitsUntilItIsCompleted(t *testing.T) {
 	th.AssertEquals(t, 1, info.failedAuths)
 }
 
+func TestRequestReauthsAtMostOnce(t *testing.T) {
+	// There was an issue where Gophercloud would go into an infinite
+	// reauthentication loop with buggy services that send 401 even for fresh
+	// tokens. This test simulates such a service and checks that a call to
+	// ProviderClient.Request() will not try to reauthenticate more than once.
+
+	reauthCounter := 0
+	var reauthCounterMutex sync.Mutex
+
+	p := new(gophercloud.ProviderClient)
+	p.UseTokenLock()
+	p.SetToken(client.TokenID)
+	p.ReauthFunc = func() error {
+		reauthCounterMutex.Lock()
+		reauthCounter++
+		reauthCounterMutex.Unlock()
+		//The actual token value does not matter, the endpoint does not check it.
+		return nil
+	}
+
+	th.SetupHTTP()
+	defer th.TeardownHTTP()
+
+	requestCounter := 0
+	var requestCounterMutex sync.Mutex
+
+	th.Mux.HandleFunc("/route", func(w http.ResponseWriter, r *http.Request) {
+		requestCounterMutex.Lock()
+		requestCounter++
+		//avoid infinite loop
+		if requestCounter == 10 {
+			http.Error(w, "too many requests", http.StatusTooManyRequests)
+			return
+		}
+		requestCounterMutex.Unlock()
+
+		//always reply 401, even immediately after reauthenticate
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	})
+
+	// The expected error message indicates that we reauthenticated once (that's
+	// the part before the colon), but when encountering another 401 response, we
+	// did not attempt reauthentication again and just passed that 401 response to
+	// the caller as ErrDefault401.
+	_, err := p.Request("GET", th.Endpoint()+"/route", &gophercloud.RequestOpts{})
+	expectedErrorMessage := "Successfully re-authenticated, but got error executing request: Authentication failed"
+	th.AssertEquals(t, expectedErrorMessage, err.Error())
+}
+
 func TestRequestWithContext(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintln(w, "OK")
@@ -323,10 +377,11 @@ func TestRequestWithContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	p := &gophercloud.ProviderClient{Context: ctx}
 
-	res, err := p.Request("GET", ts.URL, &gophercloud.RequestOpts{})
+	res, err := p.Request("GET", ts.URL, &gophercloud.RequestOpts{KeepResponseBody: true})
 	th.AssertNoErr(t, err)
 	_, err = ioutil.ReadAll(res.Body)
-	res.Body.Close()
+	th.AssertNoErr(t, err)
+	err = res.Body.Close()
 	th.AssertNoErr(t, err)
 
 	cancel()
@@ -336,5 +391,263 @@ func TestRequestWithContext(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), ctx.Err().Error()) {
 		t.Fatalf("expecting error to contain: %q, got %q", ctx.Err().Error(), err.Error())
+	}
+}
+
+func TestRequestConnectionReuse(t *testing.T) {
+	ts := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintln(w, "OK")
+	}))
+
+	// an amount of iterations
+	var iter = 10000
+	// connections tracks an amount of connections made
+	var connections int64
+
+	ts.Config.ConnState = func(_ net.Conn, s http.ConnState) {
+		// track an amount of connections
+		if s == http.StateNew {
+			atomic.AddInt64(&connections, 1)
+		}
+	}
+	ts.Start()
+	defer ts.Close()
+
+	p := &gophercloud.ProviderClient{}
+	for i := 0; i < iter; i++ {
+		_, err := p.Request("GET", ts.URL, &gophercloud.RequestOpts{KeepResponseBody: false})
+		th.AssertNoErr(t, err)
+	}
+
+	th.AssertEquals(t, int64(1), connections)
+}
+
+func TestRequestConnectionClose(t *testing.T) {
+	ts := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintln(w, "OK")
+	}))
+
+	// an amount of iterations
+	var iter = 10
+	// connections tracks an amount of connections made
+	var connections int64
+
+	ts.Config.ConnState = func(_ net.Conn, s http.ConnState) {
+		// track an amount of connections
+		if s == http.StateNew {
+			atomic.AddInt64(&connections, 1)
+		}
+	}
+	ts.Start()
+	defer ts.Close()
+
+	p := &gophercloud.ProviderClient{}
+	for i := 0; i < iter; i++ {
+		_, err := p.Request("GET", ts.URL, &gophercloud.RequestOpts{KeepResponseBody: true})
+		th.AssertNoErr(t, err)
+	}
+
+	th.AssertEquals(t, int64(iter), connections)
+}
+
+func retryTest(retryCounter *uint, t *testing.T) gophercloud.RetryFunc {
+	return func(ctx context.Context, respErr *gophercloud.ErrUnexpectedResponseCode, e error, retries uint) error {
+		retryAfter := respErr.ResponseHeader.Get("Retry-After")
+		if retryAfter == "" {
+			return e
+		}
+
+		var sleep time.Duration
+
+		// Parse delay seconds or HTTP date
+		if v, err := strconv.ParseUint(retryAfter, 10, 32); err == nil {
+			sleep = time.Duration(v) * time.Second
+		} else if v, err := time.Parse(http.TimeFormat, retryAfter); err == nil {
+			sleep = time.Until(v)
+		} else {
+			return e
+		}
+
+		if ctx != nil {
+			t.Logf("Context sleeping for %d milliseconds", sleep.Milliseconds())
+			select {
+			case <-time.After(sleep):
+				t.Log("sleep is over")
+			case <-ctx.Done():
+				t.Log(ctx.Err())
+				return e
+			}
+		} else {
+			t.Logf("Sleeping for %d milliseconds", sleep.Milliseconds())
+			time.Sleep(sleep)
+			t.Log("sleep is over")
+		}
+
+		*retryCounter = *retryCounter + 1
+
+		return nil
+	}
+}
+
+func TestRequestRetry(t *testing.T) {
+	var retryCounter uint
+
+	p := &gophercloud.ProviderClient{}
+	p.UseTokenLock()
+	p.SetToken(client.TokenID)
+	p.MaxBackoffRetries = 3
+
+	p.RetryBackoffFunc = retryTest(&retryCounter, t)
+
+	th.SetupHTTP()
+	defer th.TeardownHTTP()
+
+	th.Mux.HandleFunc("/route", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Retry-After", "1")
+
+		//always reply 429
+		http.Error(w, "retry later", http.StatusTooManyRequests)
+	})
+
+	_, err := p.Request("GET", th.Endpoint()+"/route", &gophercloud.RequestOpts{})
+	if err == nil {
+		t.Fatal("expecting error, got nil")
+	}
+	th.AssertEquals(t, retryCounter, p.MaxBackoffRetries)
+}
+
+func TestRequestRetryHTTPDate(t *testing.T) {
+	var retryCounter uint
+
+	p := &gophercloud.ProviderClient{}
+	p.UseTokenLock()
+	p.SetToken(client.TokenID)
+	p.MaxBackoffRetries = 3
+
+	p.RetryBackoffFunc = retryTest(&retryCounter, t)
+
+	th.SetupHTTP()
+	defer th.TeardownHTTP()
+
+	th.Mux.HandleFunc("/route", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Retry-After", time.Now().Add(1*time.Second).UTC().Format(http.TimeFormat))
+
+		//always reply 429
+		http.Error(w, "retry later", http.StatusTooManyRequests)
+	})
+
+	_, err := p.Request("GET", th.Endpoint()+"/route", &gophercloud.RequestOpts{})
+	if err == nil {
+		t.Fatal("expecting error, got nil")
+	}
+	th.AssertEquals(t, retryCounter, p.MaxBackoffRetries)
+}
+
+func TestRequestRetryError(t *testing.T) {
+	var retryCounter uint
+
+	p := &gophercloud.ProviderClient{}
+	p.UseTokenLock()
+	p.SetToken(client.TokenID)
+	p.MaxBackoffRetries = 3
+
+	p.RetryBackoffFunc = retryTest(&retryCounter, t)
+
+	th.SetupHTTP()
+	defer th.TeardownHTTP()
+
+	th.Mux.HandleFunc("/route", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Retry-After", "foo bar")
+
+		//always reply 429
+		http.Error(w, "retry later", http.StatusTooManyRequests)
+	})
+
+	_, err := p.Request("GET", th.Endpoint()+"/route", &gophercloud.RequestOpts{})
+	if err == nil {
+		t.Fatal("expecting error, got nil")
+	}
+	th.AssertEquals(t, retryCounter, uint(0))
+}
+
+func TestRequestRetrySuccess(t *testing.T) {
+	var retryCounter uint
+
+	p := &gophercloud.ProviderClient{}
+	p.UseTokenLock()
+	p.SetToken(client.TokenID)
+	p.MaxBackoffRetries = 3
+
+	p.RetryBackoffFunc = retryTest(&retryCounter, t)
+
+	th.SetupHTTP()
+	defer th.TeardownHTTP()
+
+	th.Mux.HandleFunc("/route", func(w http.ResponseWriter, r *http.Request) {
+		//always reply 200
+		http.Error(w, "retry later", http.StatusOK)
+	})
+
+	_, err := p.Request("GET", th.Endpoint()+"/route", &gophercloud.RequestOpts{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	th.AssertEquals(t, retryCounter, uint(0))
+}
+
+func TestRequestRetryContext(t *testing.T) {
+	var retryCounter uint
+
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		sleep := 2.5 * 1000 * time.Millisecond
+		time.Sleep(sleep)
+		cancel()
+	}()
+
+	p := &gophercloud.ProviderClient{
+		Context: ctx,
+	}
+	p.UseTokenLock()
+	p.SetToken(client.TokenID)
+	p.MaxBackoffRetries = 3
+
+	p.RetryBackoffFunc = retryTest(&retryCounter, t)
+
+	th.SetupHTTP()
+	defer th.TeardownHTTP()
+
+	th.Mux.HandleFunc("/route", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Retry-After", "1")
+
+		//always reply 429
+		http.Error(w, "retry later", http.StatusTooManyRequests)
+	})
+
+	_, err := p.Request("GET", th.Endpoint()+"/route", &gophercloud.RequestOpts{})
+	if err == nil {
+		t.Fatal("expecting error, got nil")
+	}
+	t.Logf("retryCounter: %d, p.MaxBackoffRetries: %d", retryCounter, p.MaxBackoffRetries-1)
+	th.AssertEquals(t, retryCounter, p.MaxBackoffRetries-1)
+}
+
+func TestRequestWrongOkCode(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintln(w, "OK")
+		// Returns 200 OK
+	}))
+	defer ts.Close()
+
+	p := &gophercloud.ProviderClient{}
+
+	_, err := p.Request("DELETE", ts.URL, &gophercloud.RequestOpts{})
+	th.AssertErr(t, err)
+	if urErr, ok := err.(gophercloud.ErrUnexpectedResponseCode); ok {
+		// DELETE expects a 202 or 204 by default
+		// Make sure returned error contains the expected OK codes
+		th.AssertDeepEquals(t, []int{202, 204}, urErr.Expected)
+	} else {
+		t.Fatalf("expected error type gophercloud.ErrUnexpectedResponseCode but got %T", err)
 	}
 }

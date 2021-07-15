@@ -61,22 +61,25 @@ func Create(client *gophercloud.ServiceClient, opts CreateOptsBuilder) (r Create
 		r.Err = err
 		return
 	}
-	_, r.Err = client.Post(createURL(client), b, &r.Body, &gophercloud.RequestOpts{
+	resp, err := client.Post(createURL(client), b, &r.Body, &gophercloud.RequestOpts{
 		OkCodes: []int{202},
 	})
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
 	return
 }
 
 // Delete will delete the existing Backup with the provided ID.
 func Delete(client *gophercloud.ServiceClient, id string) (r DeleteResult) {
-	_, r.Err = client.Delete(deleteURL(client, id), nil)
+	resp, err := client.Delete(deleteURL(client, id), nil)
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
 	return
 }
 
 // Get retrieves the Backup with the provided ID. To extract the Backup
 // object from the response, call the Extract method on the GetResult.
 func Get(client *gophercloud.ServiceClient, id string) (r GetResult) {
-	_, r.Err = client.Get(getURL(client, id), &r.Body, nil)
+	resp, err := client.Get(getURL(client, id), &r.Body, nil)
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
 	return
 }
 
@@ -142,6 +145,55 @@ func List(client *gophercloud.ServiceClient, opts ListOptsBuilder) pagination.Pa
 	})
 }
 
+// ListDetailOptsBuilder allows extensions to add additional parameters to the ListDetail
+// request.
+type ListDetailOptsBuilder interface {
+	ToBackupListDetailQuery() (string, error)
+}
+
+type ListDetailOpts struct {
+	// AllTenants will retrieve backups of all tenants/projects.
+	AllTenants bool `q:"all_tenants"`
+
+	// Comma-separated list of sort keys and optional sort directions in the
+	// form of <key>[:<direction>].
+	Sort string `q:"sort"`
+
+	// Requests a page size of items.
+	Limit int `q:"limit"`
+
+	// Used in conjunction with limit to return a slice of items.
+	Offset int `q:"offset"`
+
+	// The ID of the last-seen item.
+	Marker string `q:"marker"`
+
+	// True to include `count` in the API response, supported from version 3.45
+	WithCount bool `q:"with_count"`
+}
+
+// ToBackupListDetailQuery formats a ListDetailOpts into a query string.
+func (opts ListDetailOpts) ToBackupListDetailQuery() (string, error) {
+	q, err := gophercloud.BuildQueryString(opts)
+	return q.String(), err
+}
+
+// ListDetail returns more detailed information about Backups optionally
+// limited by the conditions provided in ListDetailOpts.
+func ListDetail(client *gophercloud.ServiceClient, opts ListDetailOptsBuilder) pagination.Pager {
+	url := listDetailURL(client)
+	if opts != nil {
+		query, err := opts.ToBackupListDetailQuery()
+		if err != nil {
+			return pagination.Pager{Err: err}
+		}
+		url += query
+	}
+	return pagination.NewPager(client, url, func(r pagination.PageResult) pagination.Page {
+		return BackupPage{pagination.LinkedPageBase{PageResult: r}}
+	})
+}
+
 // UpdateOptsBuilder allows extensions to add additional parameters to
 // the Update request.
 type UpdateOptsBuilder interface {
@@ -177,8 +229,75 @@ func Update(client *gophercloud.ServiceClient, id string, opts UpdateOptsBuilder
 		r.Err = err
 		return
 	}
-	_, r.Err = client.Put(updateURL(client, id), b, &r.Body, &gophercloud.RequestOpts{
+	resp, err := client.Put(updateURL(client, id), b, &r.Body, &gophercloud.RequestOpts{
 		OkCodes: []int{200},
 	})
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
+	return
+}
+
+// RestoreOpts contains options for restoring a Backup. This object is passed to
+// the backups.RestoreFromBackup function.
+type RestoreOpts struct {
+	// VolumeID is the ID of the existing volume to restore the backup to.
+	VolumeID string `json:"volume_id,omitempty"`
+
+	// Name is the name of the new volume to restore the backup to.
+	Name string `json:"name,omitempty"`
+}
+
+// ToRestoreMap assembles a request body based on the contents of a
+// RestoreOpts.
+func (opts RestoreOpts) ToRestoreMap() (map[string]interface{}, error) {
+	return gophercloud.BuildRequestBody(opts, "restore")
+}
+
+// RestoreFromBackup will restore a Backup to a volume based on the values in
+// RestoreOpts. To extract the Restore object from the response, call the
+// Extract method on the RestoreResult.
+func RestoreFromBackup(client *gophercloud.ServiceClient, id string, opts RestoreOpts) (r RestoreResult) {
+	b, err := opts.ToRestoreMap()
+	if err != nil {
+		r.Err = err
+		return
+	}
+	resp, err := client.Post(restoreURL(client, id), b, &r.Body, &gophercloud.RequestOpts{
+		OkCodes: []int{202},
+	})
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
+	return
+}
+
+// Export will export a Backup information. To extract the Backup export record
+// object from the response, call the Extract method on the ExportResult.
+func Export(client *gophercloud.ServiceClient, id string) (r ExportResult) {
+	resp, err := client.Get(exportURL(client, id), &r.Body, nil)
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
+	return
+}
+
+// ImportOpts contains options for importing a Backup. This object is passed to
+// the backups.ImportBackup function.
+type ImportOpts BackupRecord
+
+// ToBackupImportMap assembles a request body based on the contents of a
+// ImportOpts.
+func (opts ImportOpts) ToBackupImportMap() (map[string]interface{}, error) {
+	return gophercloud.BuildRequestBody(opts, "backup-record")
+}
+
+// Import will import a Backup data to a backup based on the values in
+// ImportOpts. To extract the Backup object from the response, call the
+// Extract method on the ImportResult.
+func Import(client *gophercloud.ServiceClient, opts ImportOpts) (r ImportResult) {
+	b, err := opts.ToBackupImportMap()
+	if err != nil {
+		r.Err = err
+		return
+	}
+	resp, err := client.Post(importURL(client), b, &r.Body, &gophercloud.RequestOpts{
+		OkCodes: []int{201},
+	})
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
 	return
 }

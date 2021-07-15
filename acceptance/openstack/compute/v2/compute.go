@@ -29,6 +29,7 @@ import (
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/volumeattach"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/servers"
+	neutron "github.com/gophercloud/gophercloud/openstack/networking/v2/networks"
 	th "github.com/gophercloud/gophercloud/testhelper"
 
 	"golang.org/x/crypto/ssh"
@@ -78,7 +79,7 @@ func AttachInterface(t *testing.T, client *gophercloud.ServiceClient, serverID s
 		t.Fatal(err)
 	}
 
-	networkID, err := GetNetworkIDFromTenantNetworks(t, client, choices.NetworkName)
+	networkID, err := GetNetworkIDFromNetworks(t, client, choices.NetworkName)
 	if err != nil {
 		return nil, err
 	}
@@ -138,7 +139,7 @@ func CreateBootableVolumeServer(t *testing.T, client *gophercloud.ServiceClient,
 		t.Fatal(err)
 	}
 
-	networkID, err := GetNetworkIDFromTenantNetworks(t, client, choices.NetworkName)
+	networkID, err := GetNetworkIDFromNetworks(t, client, choices.NetworkName)
 	if err != nil {
 		return server, err
 	}
@@ -150,7 +151,7 @@ func CreateBootableVolumeServer(t *testing.T, client *gophercloud.ServiceClient,
 		Name:      name,
 		FlavorRef: choices.FlavorID,
 		Networks: []servers.Network{
-			servers.Network{UUID: networkID},
+			{UUID: networkID},
 		},
 	}
 
@@ -306,7 +307,7 @@ func CreateMultiEphemeralServer(t *testing.T, client *gophercloud.ServiceClient,
 		t.Fatal(err)
 	}
 
-	networkID, err := GetNetworkIDFromTenantNetworks(t, client, choices.NetworkName)
+	networkID, err := GetNetworkIDFromNetworks(t, client, choices.NetworkName)
 	if err != nil {
 		return server, err
 	}
@@ -319,7 +320,7 @@ func CreateMultiEphemeralServer(t *testing.T, client *gophercloud.ServiceClient,
 		FlavorRef: choices.FlavorID,
 		ImageRef:  choices.ImageID,
 		Networks: []servers.Network{
-			servers.Network{UUID: networkID},
+			{UUID: networkID},
 		},
 	}
 
@@ -337,7 +338,9 @@ func CreateMultiEphemeralServer(t *testing.T, client *gophercloud.ServiceClient,
 	}
 
 	newServer, err := servers.Get(client, server.ID).Extract()
-
+	if err != nil {
+		return server, err
+	}
 	th.AssertEquals(t, newServer.Name, name)
 	th.AssertEquals(t, newServer.Flavor["id"], choices.FlavorID)
 	th.AssertEquals(t, newServer.Image["id"], choices.ImageID)
@@ -437,7 +440,7 @@ func CreateServer(t *testing.T, client *gophercloud.ServiceClient) (*servers.Ser
 		t.Fatal(err)
 	}
 
-	networkID, err := GetNetworkIDFromTenantNetworks(t, client, choices.NetworkName)
+	networkID, err := GetNetworkIDFromNetworks(t, client, choices.NetworkName)
 	if err != nil {
 		return nil, err
 	}
@@ -453,7 +456,7 @@ func CreateServer(t *testing.T, client *gophercloud.ServiceClient) (*servers.Ser
 		ImageRef:  choices.ImageID,
 		AdminPass: pwd,
 		Networks: []servers.Network{
-			servers.Network{UUID: networkID},
+			{UUID: networkID},
 		},
 		Metadata: map[string]string{
 			"abc": "def",
@@ -485,6 +488,59 @@ func CreateServer(t *testing.T, client *gophercloud.ServiceClient) (*servers.Ser
 	return newServer, nil
 }
 
+// CreateMicroversionServer creates a basic instance compatible with
+// newer microversions with a randomly generated name.
+// The flavor of the instance will be the value of the OS_FLAVOR_ID environment variable.
+// The image will be the value of the OS_IMAGE_ID environment variable.
+// The instance will be launched on the network specified in OS_NETWORK_NAME.
+// An error will be returned if the instance was unable to be created.
+func CreateMicroversionServer(t *testing.T, client *gophercloud.ServiceClient) (*servers.Server, error) {
+	choices, err := clients.AcceptanceTestChoicesFromEnv()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	networkID, err := GetNetworkIDFromNetworks(t, client, choices.NetworkName)
+	if err != nil {
+		return nil, err
+	}
+
+	name := tools.RandomString("ACPTTEST", 16)
+	t.Logf("Attempting to create server: %s", name)
+
+	pwd := tools.MakeNewPassword("")
+
+	server, err := servers.Create(client, servers.CreateOpts{
+		Name:      name,
+		FlavorRef: choices.FlavorID,
+		ImageRef:  choices.ImageID,
+		AdminPass: pwd,
+		Networks: []servers.Network{
+			{UUID: networkID},
+		},
+		Metadata: map[string]string{
+			"abc": "def",
+		},
+	}).Extract()
+	if err != nil {
+		return server, err
+	}
+
+	if err := WaitForComputeStatus(client, server, "ACTIVE"); err != nil {
+		return nil, err
+	}
+
+	newServer, err := servers.Get(client, server.ID).Extract()
+	if err != nil {
+		return nil, err
+	}
+
+	th.AssertEquals(t, newServer.Name, name)
+	th.AssertEquals(t, newServer.Image["id"], choices.ImageID)
+
+	return newServer, nil
+}
+
 // CreateServerWithoutImageRef creates a basic instance with a randomly generated name.
 // The flavor of the instance will be the value of the OS_FLAVOR_ID environment variable.
 // The image is intentionally missing to trigger an error.
@@ -496,7 +552,7 @@ func CreateServerWithoutImageRef(t *testing.T, client *gophercloud.ServiceClient
 		t.Fatal(err)
 	}
 
-	networkID, err := GetNetworkIDFromTenantNetworks(t, client, choices.NetworkName)
+	networkID, err := GetNetworkIDFromNetworks(t, client, choices.NetworkName)
 	if err != nil {
 		return nil, err
 	}
@@ -511,7 +567,7 @@ func CreateServerWithoutImageRef(t *testing.T, client *gophercloud.ServiceClient
 		FlavorRef: choices.FlavorID,
 		AdminPass: pwd,
 		Networks: []servers.Network{
-			servers.Network{UUID: networkID},
+			{UUID: networkID},
 		},
 		Personality: servers.Personality{
 			&servers.File{
@@ -554,7 +610,7 @@ func CreateServerWithTags(t *testing.T, client *gophercloud.ServiceClient, netwo
 		ImageRef:  choices.ImageID,
 		AdminPass: pwd,
 		Networks: []servers.Network{
-			servers.Network{UUID: networkID},
+			{UUID: networkID},
 		},
 		Metadata: map[string]string{
 			"abc": "def",
@@ -583,10 +639,7 @@ func CreateServerWithTags(t *testing.T, client *gophercloud.ServiceClient, netwo
 	newServer, err := res.Extract()
 	th.AssertNoErr(t, err)
 	th.AssertEquals(t, newServer.Name, name)
-
-	tags, err := res.ExtractTags()
-	th.AssertNoErr(t, err)
-	th.AssertDeepEquals(t, tags, []string{"tag1", "tag2"})
+	th.AssertDeepEquals(t, *newServer.Tags, []string{"tag1", "tag2"})
 
 	return newServer, nil
 }
@@ -650,7 +703,7 @@ func CreateServerInServerGroup(t *testing.T, client *gophercloud.ServiceClient, 
 		t.Fatal(err)
 	}
 
-	networkID, err := GetNetworkIDFromTenantNetworks(t, client, choices.NetworkName)
+	networkID, err := GetNetworkIDFromNetworks(t, client, choices.NetworkName)
 	if err != nil {
 		return nil, err
 	}
@@ -666,7 +719,7 @@ func CreateServerInServerGroup(t *testing.T, client *gophercloud.ServiceClient, 
 		ImageRef:  choices.ImageID,
 		AdminPass: pwd,
 		Networks: []servers.Network{
-			servers.Network{UUID: networkID},
+			{UUID: networkID},
 		},
 	}
 
@@ -705,7 +758,7 @@ func CreateServerWithPublicKey(t *testing.T, client *gophercloud.ServiceClient, 
 		t.Fatal(err)
 	}
 
-	networkID, err := GetNetworkIDFromTenantNetworks(t, client, choices.NetworkName)
+	networkID, err := GetNetworkIDFromNetworks(t, client, choices.NetworkName)
 	if err != nil {
 		return nil, err
 	}
@@ -718,7 +771,7 @@ func CreateServerWithPublicKey(t *testing.T, client *gophercloud.ServiceClient, 
 		FlavorRef: choices.FlavorID,
 		ImageRef:  choices.ImageID,
 		Networks: []servers.Network{
-			servers.Network{UUID: networkID},
+			{UUID: networkID},
 		},
 	}
 
@@ -749,8 +802,13 @@ func CreateServerWithPublicKey(t *testing.T, client *gophercloud.ServiceClient, 
 // CreateVolumeAttachment will attach a volume to a server. An error will be
 // returned if the volume failed to attach.
 func CreateVolumeAttachment(t *testing.T, client *gophercloud.ServiceClient, blockClient *gophercloud.ServiceClient, server *servers.Server, volume *volumes.Volume) (*volumeattach.VolumeAttachment, error) {
+	tag := tools.RandomString("ACPTTEST", 16)
+	dot := false
+
 	volumeAttachOptions := volumeattach.CreateOpts{
-		VolumeID: volume.ID,
+		VolumeID:            volume.ID,
+		Tag:                 tag,
+		DeleteOnTermination: dot,
 	}
 
 	t.Logf("Attempting to attach volume %s to server %s", volume.ID, server.ID)
@@ -817,7 +875,7 @@ func DeleteFloatingIP(t *testing.T, client *gophercloud.ServiceClient, floatingI
 // the keypair failed to be deleted. This works best when used as a deferred
 // function.
 func DeleteKeyPair(t *testing.T, client *gophercloud.ServiceClient, keyPair *keypairs.KeyPair) {
-	err := keypairs.Delete(client, keyPair.Name).ExtractErr()
+	err := keypairs.Delete(client, keyPair.Name, nil).ExtractErr()
 	if err != nil {
 		t.Fatalf("Unable to delete keypair %s: %v", keyPair.Name, err)
 	}
@@ -928,10 +986,10 @@ func DisassociateFloatingIP(t *testing.T, client *gophercloud.ServiceClient, flo
 	t.Logf("Disassociated floating IP %s from server %s", floatingIP.IP, server.ID)
 }
 
-// GetNetworkIDFromNetworks will return the network ID from a specified network
+// GetNetworkIDFromOSNetworks will return the network ID from a specified network
 // UUID using the os-networks API extension. An error will be returned if the
 // network could not be retrieved.
-func GetNetworkIDFromNetworks(t *testing.T, client *gophercloud.ServiceClient, networkName string) (string, error) {
+func GetNetworkIDFromOSNetworks(t *testing.T, client *gophercloud.ServiceClient, networkName string) (string, error) {
 	allPages, err := networks.List(client).AllPages()
 	if err != nil {
 		t.Fatalf("Unable to list networks: %v", err)
@@ -970,6 +1028,42 @@ func GetNetworkIDFromTenantNetworks(t *testing.T, client *gophercloud.ServiceCli
 	}
 
 	for _, network := range allTenantNetworks {
+		if network.Name == networkName {
+			return network.ID, nil
+		}
+	}
+
+	return "", fmt.Errorf("Failed to obtain network ID for network %s", networkName)
+}
+
+// GetNetworkIDFromNetworks will return the network UUID for a given network
+// name using either the os-tenant-networks API extension or Neutron API.
+// An error will be returned if the network could not be retrieved.
+func GetNetworkIDFromNetworks(t *testing.T, client *gophercloud.ServiceClient, networkName string) (string, error) {
+	allPages, err := tenantnetworks.List(client).AllPages()
+	if err == nil {
+		allTenantNetworks, err := tenantnetworks.ExtractNetworks(allPages)
+		if err != nil {
+			return "", err
+		}
+
+		for _, network := range allTenantNetworks {
+			if network.Name == networkName {
+				return network.ID, nil
+			}
+		}
+	}
+
+	networkClient, err := clients.NewNetworkV2Client()
+	th.AssertNoErr(t, err)
+
+	allPages2, err := neutron.List(networkClient, nil).AllPages()
+	th.AssertNoErr(t, err)
+
+	allNetworks, err := neutron.ExtractNetworks(allPages2)
+	th.AssertNoErr(t, err)
+
+	for _, network := range allNetworks {
 		if network.Name == networkName {
 			return network.ID, nil
 		}
@@ -1108,4 +1202,56 @@ func CreateRemoteConsole(t *testing.T, client *gophercloud.ServiceClient, server
 
 	t.Logf("Successfully created console: %s", remoteConsole.URL)
 	return remoteConsole, nil
+}
+
+// CreateNoNetworkServer creates a basic instance with a randomly generated name.
+// The flavor of the instance will be the value of the OS_FLAVOR_ID environment variable.
+// The image will be the value of the OS_IMAGE_ID environment variable.
+// The instance will be launched without network interfaces attached.
+// An error will be returned if the instance was unable to be created.
+func CreateServerNoNetwork(t *testing.T, client *gophercloud.ServiceClient) (*servers.Server, error) {
+	choices, err := clients.AcceptanceTestChoicesFromEnv()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	name := tools.RandomString("ACPTTEST", 16)
+	t.Logf("Attempting to create server: %s", name)
+
+	pwd := tools.MakeNewPassword("")
+
+	server, err := servers.Create(client, servers.CreateOpts{
+		Name:      name,
+		FlavorRef: choices.FlavorID,
+		ImageRef:  choices.ImageID,
+		AdminPass: pwd,
+		Networks:  "none",
+		Metadata: map[string]string{
+			"abc": "def",
+		},
+		Personality: servers.Personality{
+			&servers.File{
+				Path:     "/etc/test",
+				Contents: []byte("hello world"),
+			},
+		},
+	}).Extract()
+	if err != nil {
+		return server, err
+	}
+
+	if err := WaitForComputeStatus(client, server, "ACTIVE"); err != nil {
+		return nil, err
+	}
+
+	newServer, err := servers.Get(client, server.ID).Extract()
+	if err != nil {
+		return nil, err
+	}
+
+	th.AssertEquals(t, newServer.Name, name)
+	th.AssertEquals(t, newServer.Flavor["id"], choices.FlavorID)
+	th.AssertEquals(t, newServer.Image["id"], choices.ImageID)
+
+	return newServer, nil
 }

@@ -1,8 +1,6 @@
 package claims
 
 import (
-	"net/http"
-
 	"github.com/gophercloud/gophercloud"
 )
 
@@ -52,27 +50,19 @@ func Create(client *gophercloud.ServiceClient, queueName string, opts CreateOpts
 		url += q
 	}
 
-	var resp *http.Response
-	resp, r.Err = client.Post(url, b, nil, &gophercloud.RequestOpts{
+	resp, err := client.Post(url, b, &r.Body, &gophercloud.RequestOpts{
 		OkCodes: []int{201, 204},
 	})
-	if r.Err != nil {
-		return
-	}
-	// If the Claim has no content return an empty CreateResult
-	if resp.StatusCode == 204 {
-		r.Body = CreateResult{}
-	} else {
-		r.Body = resp.Body
-	}
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
 	return
 }
 
 // Get queries the specified claim for the specified queue.
 func Get(client *gophercloud.ServiceClient, queueName string, claimID string) (r GetResult) {
-	_, r.Err = client.Get(getURL(client, queueName, claimID), &r.Body, &gophercloud.RequestOpts{
+	resp, err := client.Get(getURL(client, queueName, claimID), &r.Body, &gophercloud.RequestOpts{
 		OkCodes: []int{200},
 	})
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
 	return
 }
 
@@ -108,16 +98,18 @@ func Update(client *gophercloud.ServiceClient, queueName string, claimID string,
 		r.Err = err
 		return r
 	}
-	_, r.Err = client.Patch(updateURL(client, queueName, claimID), &b, nil, &gophercloud.RequestOpts{
+	resp, err := client.Patch(updateURL(client, queueName, claimID), &b, nil, &gophercloud.RequestOpts{
 		OkCodes: []int{204},
 	})
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
 	return
 }
 
 // Delete will delete a Claim for a specified Queue.
 func Delete(client *gophercloud.ServiceClient, queueName string, claimID string) (r DeleteResult) {
-	_, r.Err = client.Delete(deleteURL(client, queueName, claimID), &gophercloud.RequestOpts{
+	resp, err := client.Delete(deleteURL(client, queueName, claimID), &gophercloud.RequestOpts{
 		OkCodes: []int{204},
 	})
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
 	return
 }

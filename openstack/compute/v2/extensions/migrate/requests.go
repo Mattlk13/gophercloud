@@ -2,11 +2,13 @@ package migrate
 
 import (
 	"github.com/gophercloud/gophercloud"
+	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions"
 )
 
 // Migrate will initiate a migration of the instance to another host.
 func Migrate(client *gophercloud.ServiceClient, id string) (r MigrateResult) {
-	_, r.Err = client.Post(actionURL(client, id), map[string]interface{}{"migrate": nil}, nil, nil)
+	resp, err := client.Post(extensions.ActionURL(client, id), map[string]interface{}{"migrate": nil}, nil, nil)
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
 	return
 }
 
@@ -45,6 +47,7 @@ func LiveMigrate(client *gophercloud.ServiceClient, id string, opts LiveMigrateO
 		r.Err = err
 		return
 	}
-	_, r.Err = client.Post(actionURL(client, id), b, nil, nil)
+	resp, err := client.Post(extensions.ActionURL(client, id), b, nil, nil)
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
 	return
 }

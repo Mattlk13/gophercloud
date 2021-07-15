@@ -40,7 +40,7 @@ func TestListApplicationCredentialsAllPages(t *testing.T) {
 	th.AssertNoErr(t, err)
 	th.CheckDeepEquals(t, ExpectedApplicationCredentialsSlice, actual)
 	th.AssertDeepEquals(t, ExpectedApplicationCredentialsSlice[0].Roles, []applicationcredentials.Role{{ID: "31f87923ae4a4d119aa0b85dcdbeed13", Name: "compute_viewer"}})
-	th.AssertDeepEquals(t, ExpectedApplicationCredentialsSlice[1].Roles, []applicationcredentials.Role{applicationcredentials.Role{ID: "31f87923ae4a4d119aa0b85dcdbeed13", Name: "compute_viewer"}, applicationcredentials.Role{ID: "4494bc5bea1a4105ad7fbba6a7eb9ef4", Name: "network_viewer"}})
+	th.AssertDeepEquals(t, ExpectedApplicationCredentialsSlice[1].Roles, []applicationcredentials.Role{{ID: "31f87923ae4a4d119aa0b85dcdbeed13", Name: "compute_viewer"}, {ID: "4494bc5bea1a4105ad7fbba6a7eb9ef4", Name: "network_viewer"}})
 }
 
 func TestGetApplicationCredential(t *testing.T) {
@@ -62,7 +62,14 @@ func TestCreateApplicationCredential(t *testing.T) {
 		Name:   "test",
 		Secret: "mysecret",
 		Roles: []applicationcredentials.Role{
-			applicationcredentials.Role{ID: "31f87923ae4a4d119aa0b85dcdbeed13"},
+			{ID: "31f87923ae4a4d119aa0b85dcdbeed13"},
+		},
+		AccessRules: []applicationcredentials.AccessRule{
+			{
+				Path:    "/v2.0/metrics",
+				Method:  "GET",
+				Service: "monitoring",
+			},
 		},
 	}
 
@@ -82,7 +89,7 @@ func TestCreateNoSecretApplicationCredential(t *testing.T) {
 	createOpts := applicationcredentials.CreateOpts{
 		Name: "test1",
 		Roles: []applicationcredentials.Role{
-			applicationcredentials.Role{ID: "31f87923ae4a4d119aa0b85dcdbeed13"},
+			{ID: "31f87923ae4a4d119aa0b85dcdbeed13"},
 		},
 	}
 
@@ -100,10 +107,10 @@ func TestCreateUnrestrictedApplicationCredential(t *testing.T) {
 		Name:         "test2",
 		Unrestricted: true,
 		Roles: []applicationcredentials.Role{
-			applicationcredentials.Role{ID: "31f87923ae4a4d119aa0b85dcdbeed13"},
-			applicationcredentials.Role{ID: "4494bc5bea1a4105ad7fbba6a7eb9ef4"},
+			{ID: "31f87923ae4a4d119aa0b85dcdbeed13"},
+			{ID: "4494bc5bea1a4105ad7fbba6a7eb9ef4"},
 		},
-		ExpiresAt: "2019-03-12T12:12:12.000000",
+		ExpiresAt: &ApplationCredentialExpiresAt,
 	}
 
 	UnrestrictedApplicationCredentialResponse := UnrestrictedApplicationCredential
@@ -120,5 +127,44 @@ func TestDeleteApplicationCredential(t *testing.T) {
 	HandleDeleteApplicationCredentialSuccessfully(t)
 
 	res := applicationcredentials.Delete(client.ServiceClient(), userID, applicationCredentialID)
+	th.AssertNoErr(t, res.Err)
+}
+
+func TestListAccessRules(t *testing.T) {
+	th.SetupHTTP()
+	defer th.TeardownHTTP()
+	HandleListAccessRulesSuccessfully(t)
+
+	count := 0
+	err := applicationcredentials.ListAccessRules(client.ServiceClient(), userID).EachPage(func(page pagination.Page) (bool, error) {
+		count++
+
+		actual, err := applicationcredentials.ExtractAccessRules(page)
+		th.AssertNoErr(t, err)
+
+		th.CheckDeepEquals(t, ExpectedAccessRulesSlice, actual)
+
+		return true, nil
+	})
+	th.AssertNoErr(t, err)
+	th.CheckEquals(t, count, 1)
+}
+
+func TestGetAccessRule(t *testing.T) {
+	th.SetupHTTP()
+	defer th.TeardownHTTP()
+	HandleGetAccessRuleSuccessfully(t)
+
+	actual, err := applicationcredentials.GetAccessRule(client.ServiceClient(), userID, accessRuleID).Extract()
+	th.AssertNoErr(t, err)
+	th.CheckDeepEquals(t, AccessRule, *actual)
+}
+
+func TestDeleteAccessRule(t *testing.T) {
+	th.SetupHTTP()
+	defer th.TeardownHTTP()
+	HandleDeleteAccessRuleSuccessfully(t)
+
+	res := applicationcredentials.DeleteAccessRule(client.ServiceClient(), userID, accessRuleID)
 	th.AssertNoErr(t, res.Err)
 }

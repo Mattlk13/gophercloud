@@ -4,6 +4,8 @@ package v1
 
 import (
 	"bytes"
+	"io/ioutil"
+	"net/http"
 	"strings"
 	"testing"
 
@@ -81,6 +83,25 @@ func TestObjects(t *testing.T) {
 		t.Fatalf("Unable to extract object info: %v", err)
 	}
 	th.AssertEquals(t, len(ois), len(oNames))
+
+	// Create temporary URL, download its contents and compare with what was originally created.
+	// Downloading the URL validates it (this cannot be done in unit tests).
+	objURLs := make([]string, numObjects)
+	for i := 0; i < numObjects; i++ {
+		objURLs[i], err = objects.CreateTempURL(client, cName, oNames[i], objects.CreateTempURLOpts{
+			Method: http.MethodGet,
+			TTL:    180,
+		})
+		th.AssertNoErr(t, err)
+
+		resp, err := http.Get(objURLs[i])
+		th.AssertNoErr(t, err)
+
+		body, err := ioutil.ReadAll(resp.Body)
+		th.AssertNoErr(t, err)
+		th.AssertDeepEquals(t, oContents[i].Bytes(), body)
+		resp.Body.Close()
+	}
 
 	// Copy the contents of one object to another.
 	copyOpts := objects.CopyOpts{
@@ -260,4 +281,88 @@ func TestObjectsListSubdir(t *testing.T) {
 
 	th.AssertEquals(t, allObjects[0], cSubdir2+"/")
 	t.Logf("%#v\n", allObjects)
+}
+
+func TestObjectsBulkDelete(t *testing.T) {
+	client, err := clients.NewObjectStorageV1Client()
+	if err != nil {
+		t.Fatalf("Unable to create client: %v", err)
+	}
+
+	// Create a random subdirectory name.
+	cSubdir1 := tools.RandomString("test-subdir-", 8)
+	cSubdir2 := tools.RandomString("test-subdir-", 8)
+
+	// Make a slice of length numObjects to hold the random object names.
+	oNames1 := make([]string, numObjects)
+	for i := 0; i < len(oNames1); i++ {
+		oNames1[i] = cSubdir1 + "/" + tools.RandomString("test-object-", 8)
+	}
+
+	oNames2 := make([]string, numObjects)
+	for i := 0; i < len(oNames2); i++ {
+		oNames2[i] = cSubdir2 + "/" + tools.RandomString("test-object-", 8)
+	}
+
+	// Create a container to hold the test objects.
+	cName := tools.RandomString("test-container-", 8)
+	_, err = containers.Create(client, cName, nil).Extract()
+	th.AssertNoErr(t, err)
+
+	// Defer deletion of the container until after testing.
+	defer func() {
+		t.Logf("Deleting container %s", cName)
+		res := containers.Delete(client, cName)
+		th.AssertNoErr(t, res.Err)
+	}()
+
+	// Create a slice of buffers to hold the test object content.
+	oContents1 := make([]*bytes.Buffer, numObjects)
+	for i := 0; i < numObjects; i++ {
+		oContents1[i] = bytes.NewBuffer([]byte(tools.RandomString("", 10)))
+		createOpts := objects.CreateOpts{
+			Content: oContents1[i],
+		}
+		res := objects.Create(client, cName, oNames1[i], createOpts)
+		th.AssertNoErr(t, res.Err)
+	}
+
+	oContents2 := make([]*bytes.Buffer, numObjects)
+	for i := 0; i < numObjects; i++ {
+		oContents2[i] = bytes.NewBuffer([]byte(tools.RandomString("", 10)))
+		createOpts := objects.CreateOpts{
+			Content: oContents2[i],
+		}
+		res := objects.Create(client, cName, oNames2[i], createOpts)
+		th.AssertNoErr(t, res.Err)
+	}
+
+	// Delete the objects after testing.
+	expectedResp := objects.BulkDeleteResponse{
+		ResponseStatus: "200 OK",
+		Errors:         [][]string{},
+		NumberDeleted:  numObjects * 2,
+	}
+
+	resp, err := objects.BulkDelete(client, cName, append(oNames1, oNames2...)).Extract()
+	th.AssertNoErr(t, err)
+	th.AssertDeepEquals(t, *resp, expectedResp)
+
+	// Verify deletion
+	listOpts := objects.ListOpts{
+		Full:      true,
+		Delimiter: "/",
+	}
+
+	allPages, err := objects.List(client, cName, listOpts).AllPages()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	allObjects, err := objects.ExtractNames(allPages)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	th.AssertEquals(t, len(allObjects), 0)
 }

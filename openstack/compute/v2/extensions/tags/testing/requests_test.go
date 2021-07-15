@@ -15,7 +15,7 @@ func TestList(t *testing.T) {
 	defer th.TeardownHTTP()
 
 	th.Mux.HandleFunc("/servers/uuid1/tags", func(w http.ResponseWriter, r *http.Request) {
-		th.TestMethod(t, r, "GET")
+		th.TestMethod(t, r, http.MethodGet)
 		th.TestHeader(t, r, "X-Auth-Token", client.TokenID)
 
 		w.Header().Add("Content-Type", "application/json")
@@ -37,7 +37,7 @@ func TestCheckOk(t *testing.T) {
 	defer th.TeardownHTTP()
 
 	th.Mux.HandleFunc("/servers/uuid1/tags/foo", func(w http.ResponseWriter, r *http.Request) {
-		th.TestMethod(t, r, "GET")
+		th.TestMethod(t, r, http.MethodGet)
 		th.TestHeader(t, r, "X-Auth-Token", client.TokenID)
 
 		w.Header().Add("Content-Type", "application/json")
@@ -54,7 +54,7 @@ func TestCheckFail(t *testing.T) {
 	defer th.TeardownHTTP()
 
 	th.Mux.HandleFunc("/servers/uuid1/tags/bar", func(w http.ResponseWriter, r *http.Request) {
-		th.TestMethod(t, r, "GET")
+		th.TestMethod(t, r, http.MethodGet)
 		th.TestHeader(t, r, "X-Auth-Token", client.TokenID)
 
 		w.Header().Add("Content-Type", "application/json")
@@ -64,4 +64,90 @@ func TestCheckFail(t *testing.T) {
 	exists, err := tags.Check(client.ServiceClient(), "uuid1", "bar").Extract()
 	th.AssertNoErr(t, err)
 	th.AssertEquals(t, false, exists)
+}
+
+func TestReplaceAll(t *testing.T) {
+	th.SetupHTTP()
+	defer th.TeardownHTTP()
+
+	th.Mux.HandleFunc("/servers/uuid1/tags", func(w http.ResponseWriter, r *http.Request) {
+		th.TestMethod(t, r, http.MethodPut)
+		th.TestHeader(t, r, "X-Auth-Token", client.TokenID)
+
+		w.Header().Add("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+
+		_, err := fmt.Fprintf(w, TagsReplaceAllResponse)
+		th.AssertNoErr(t, err)
+	})
+
+	expected := []string{"tag1", "tag2", "tag3"}
+	actual, err := tags.ReplaceAll(client.ServiceClient(), "uuid1", tags.ReplaceAllOpts{Tags: []string{"tag1", "tag2", "tag3"}}).Extract()
+
+	th.AssertNoErr(t, err)
+	th.AssertDeepEquals(t, expected, actual)
+}
+
+func TestAddCreated(t *testing.T) {
+	th.SetupHTTP()
+	defer th.TeardownHTTP()
+
+	th.Mux.HandleFunc("/servers/uuid1/tags/foo", func(w http.ResponseWriter, r *http.Request) {
+		th.TestMethod(t, r, http.MethodPut)
+		th.TestHeader(t, r, "X-Auth-Token", client.TokenID)
+
+		w.Header().Add("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+	})
+
+	err := tags.Add(client.ServiceClient(), "uuid1", "foo").ExtractErr()
+	th.AssertNoErr(t, err)
+}
+
+func TestAddExists(t *testing.T) {
+	th.SetupHTTP()
+	defer th.TeardownHTTP()
+
+	th.Mux.HandleFunc("/servers/uuid1/tags/foo", func(w http.ResponseWriter, r *http.Request) {
+		th.TestMethod(t, r, http.MethodPut)
+		th.TestHeader(t, r, "X-Auth-Token", client.TokenID)
+
+		w.Header().Add("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	err := tags.Add(client.ServiceClient(), "uuid1", "foo").ExtractErr()
+	th.AssertNoErr(t, err)
+}
+
+func TestDelete(t *testing.T) {
+	th.SetupHTTP()
+	defer th.TeardownHTTP()
+
+	th.Mux.HandleFunc("/servers/uuid1/tags/foo", func(w http.ResponseWriter, r *http.Request) {
+		th.TestMethod(t, r, http.MethodDelete)
+		th.TestHeader(t, r, "X-Auth-Token", client.TokenID)
+
+		w.Header().Add("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	err := tags.Delete(client.ServiceClient(), "uuid1", "foo").ExtractErr()
+	th.AssertNoErr(t, err)
+}
+
+func TestDeleteAll(t *testing.T) {
+	th.SetupHTTP()
+	defer th.TeardownHTTP()
+
+	th.Mux.HandleFunc("/servers/uuid1/tags", func(w http.ResponseWriter, r *http.Request) {
+		th.TestMethod(t, r, http.MethodDelete)
+		th.TestHeader(t, r, "X-Auth-Token", client.TokenID)
+
+		w.Header().Add("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	err := tags.DeleteAll(client.ServiceClient(), "uuid1").ExtractErr()
+	th.AssertNoErr(t, err)
 }

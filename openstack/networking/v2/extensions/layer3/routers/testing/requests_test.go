@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"testing"
+	"time"
 
 	fake "github.com/gophercloud/gophercloud/openstack/networking/v2/common"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/layer3/routers"
@@ -175,7 +176,7 @@ func TestCreate(t *testing.T) {
 	asu := false
 	enableSNAT := false
 	efi := []routers.ExternalFixedIP{
-		routers.ExternalFixedIP{
+		{
 			SubnetID: "ab561bc4-1a8e-48f2-9fbd-376fcb1a1def",
 		},
 	}
@@ -317,7 +318,7 @@ func TestUpdate(t *testing.T) {
 
 	gwi := routers.GatewayInfo{NetworkID: "8ca37218-28ff-41cb-9b10-039601ea7e6b"}
 	r := []routers.Route{{DestinationCIDR: "40.0.1.0/24", NextHop: "10.1.0.10"}}
-	options := routers.UpdateOpts{Name: "new_name", GatewayInfo: &gwi, Routes: r}
+	options := routers.UpdateOpts{Name: "new_name", GatewayInfo: &gwi, Routes: &r}
 
 	n, err := routers.Update(fake.ServiceClient(), "4e8e5957-649f-477b-9e5b-f1f75b21c03c", options).Extract()
 	th.AssertNoErr(t, err)
@@ -328,6 +329,61 @@ func TestUpdate(t *testing.T) {
 
 	th.AssertEquals(t, n.Name, "new_name")
 	th.AssertDeepEquals(t, n.GatewayInfo, gwi)
+	th.AssertDeepEquals(t, n.Routes, []routers.Route{{DestinationCIDR: "40.0.1.0/24", NextHop: "10.1.0.10"}})
+}
+
+func TestUpdateWithoutRoutes(t *testing.T) {
+	th.SetupHTTP()
+	defer th.TeardownHTTP()
+
+	th.Mux.HandleFunc("/v2.0/routers/4e8e5957-649f-477b-9e5b-f1f75b21c03c", func(w http.ResponseWriter, r *http.Request) {
+		th.TestMethod(t, r, "PUT")
+		th.TestHeader(t, r, "X-Auth-Token", fake.TokenID)
+		th.TestHeader(t, r, "Content-Type", "application/json")
+		th.TestHeader(t, r, "Accept", "application/json")
+		th.TestJSONRequest(t, r, `
+{
+    "router": {
+        "name": "new_name"
+    }
+}
+		`)
+
+		w.Header().Add("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+
+		fmt.Fprintf(w, `
+{
+    "router": {
+        "status": "ACTIVE",
+        "external_gateway_info": {
+            "network_id": "8ca37218-28ff-41cb-9b10-039601ea7e6b",
+            "external_fixed_ips": [
+                {"ip_address": "192.0.2.17", "subnet_id": "ab561bc4-1a8e-48f2-9fbd-376fcb1a1def"}
+            ]
+        },
+        "name": "new_name",
+        "admin_state_up": true,
+        "tenant_id": "6b96ff0cb17a4b859e1e575d221683d3",
+        "distributed": false,
+        "id": "8604a0de-7f6b-409a-a47c-a1cc7bc77b2e",
+        "routes": [
+            {
+                "nexthop": "10.1.0.10",
+                "destination": "40.0.1.0/24"
+            }
+        ]
+    }
+}
+		`)
+	})
+
+	options := routers.UpdateOpts{Name: "new_name"}
+
+	n, err := routers.Update(fake.ServiceClient(), "4e8e5957-649f-477b-9e5b-f1f75b21c03c", options).Extract()
+	th.AssertNoErr(t, err)
+
+	th.AssertEquals(t, n.Name, "new_name")
 	th.AssertDeepEquals(t, n.Routes, []routers.Route{{DestinationCIDR: "40.0.1.0/24", NextHop: "10.1.0.10"}})
 }
 
@@ -370,7 +426,7 @@ func TestAllRoutesRemoved(t *testing.T) {
 	})
 
 	r := []routers.Route{}
-	options := routers.UpdateOpts{Routes: r}
+	options := routers.UpdateOpts{Routes: &r}
 
 	n, err := routers.Update(fake.ServiceClient(), "4e8e5957-649f-477b-9e5b-f1f75b21c03c", options).Extract()
 	th.AssertNoErr(t, err)
@@ -477,4 +533,141 @@ func TestRemoveInterface(t *testing.T) {
 	th.AssertEquals(t, "017d8de156df4177889f31a9bd6edc00", res.TenantID)
 	th.AssertEquals(t, "3f990102-4485-4df1-97a0-2c35bdb85b31", res.PortID)
 	th.AssertEquals(t, "9a83fa11-8da5-436e-9afe-3d3ac5ce7770", res.ID)
+}
+
+func TestListL3Agents(t *testing.T) {
+	th.SetupHTTP()
+	defer th.TeardownHTTP()
+
+	th.Mux.HandleFunc("/v2.0/routers/fa3a4aaa-c73f-48aa-a603-8c8bf642b7c0/l3-agents", func(w http.ResponseWriter, r *http.Request) {
+		th.TestMethod(t, r, "GET")
+		th.TestHeader(t, r, "X-Auth-Token", fake.TokenID)
+
+		w.Header().Add("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+
+		fmt.Fprintf(w, `
+{
+    "agents": [
+        {
+            "id": "ddbf087c-e38f-4a73-bcb3-c38f2a719a03",
+            "agent_type": "L3 agent",
+            "binary": "neutron-l3-agent",
+            "topic": "l3_agent",
+            "host": "os-ctrl-02",
+            "admin_state_up": true,
+            "created_at": "2017-07-26 23:15:44",
+            "started_at": "2018-06-26 21:46:19",
+            "heartbeat_timestamp": "2019-01-09 10:28:53",
+            "description": "My L3 agent for OpenStack",
+            "resources_synced": true,
+            "availability_zone": "nova",
+            "alive": true,
+            "configurations": {
+                "agent_mode": "legacy",
+                "ex_gw_ports": 2,
+                "floating_ips": 2,
+                "handle_internal_only_routers": true,
+                "interface_driver": "linuxbridge",
+                "interfaces": 1,
+                "log_agent_heartbeats": false,
+                "routers": 2
+            },
+            "resource_versions": {},
+            "ha_state": "standby"
+        },
+        {
+            "id": "4541cc6c-87bc-4cee-bad2-36ca78836c91",
+            "agent_type": "L3 agent",
+            "binary": "neutron-l3-agent",
+            "topic": "l3_agent",
+            "host": "os-ctrl-03",
+            "admin_state_up": true,
+            "created_at": "2017-01-22 14:00:50",
+            "started_at": "2018-11-06 12:09:17",
+            "heartbeat_timestamp": "2019-01-09 10:28:50",
+            "description": "My L3 agent for OpenStack",
+            "resources_synced": true,
+            "availability_zone": "nova",
+            "alive": true,
+            "configurations": {
+                "agent_mode": "legacy",
+                "ex_gw_ports": 2,
+                "floating_ips": 2,
+                "handle_internal_only_routers": true,
+                "interface_driver": "linuxbridge",
+                "interfaces": 1,
+                "log_agent_heartbeats": false,
+                "routers": 2
+            },
+            "resource_versions": {},
+            "ha_state": "active"
+        }
+    ]
+}
+			`)
+	})
+
+	l3AgentsPages, err := routers.ListL3Agents(fake.ServiceClient(), "fa3a4aaa-c73f-48aa-a603-8c8bf642b7c0").AllPages()
+	th.AssertNoErr(t, err)
+	actual, err := routers.ExtractL3Agents(l3AgentsPages)
+	th.AssertNoErr(t, err)
+
+	expected := []routers.L3Agent{
+		{
+			ID:               "ddbf087c-e38f-4a73-bcb3-c38f2a719a03",
+			AdminStateUp:     true,
+			AgentType:        "L3 agent",
+			Description:      "My L3 agent for OpenStack",
+			Alive:            true,
+			ResourcesSynced:  true,
+			Binary:           "neutron-l3-agent",
+			AvailabilityZone: "nova",
+			Configurations: map[string]interface{}{
+				"agent_mode":                   "legacy",
+				"ex_gw_ports":                  float64(2),
+				"floating_ips":                 float64(2),
+				"handle_internal_only_routers": true,
+				"interface_driver":             "linuxbridge",
+				"interfaces":                   float64(1),
+				"log_agent_heartbeats":         false,
+				"routers":                      float64(2),
+			},
+			CreatedAt:          time.Date(2017, 7, 26, 23, 15, 44, 0, time.UTC),
+			StartedAt:          time.Date(2018, 6, 26, 21, 46, 19, 0, time.UTC),
+			HeartbeatTimestamp: time.Date(2019, 1, 9, 10, 28, 53, 0, time.UTC),
+			Host:               "os-ctrl-02",
+			Topic:              "l3_agent",
+			HAState:            "standby",
+			ResourceVersions:   map[string]interface{}{},
+		},
+		{
+			ID:               "4541cc6c-87bc-4cee-bad2-36ca78836c91",
+			AdminStateUp:     true,
+			AgentType:        "L3 agent",
+			Description:      "My L3 agent for OpenStack",
+			Alive:            true,
+			ResourcesSynced:  true,
+			Binary:           "neutron-l3-agent",
+			AvailabilityZone: "nova",
+			Configurations: map[string]interface{}{
+				"agent_mode":                   "legacy",
+				"ex_gw_ports":                  float64(2),
+				"floating_ips":                 float64(2),
+				"handle_internal_only_routers": true,
+				"interface_driver":             "linuxbridge",
+				"interfaces":                   float64(1),
+				"log_agent_heartbeats":         false,
+				"routers":                      float64(2),
+			},
+			CreatedAt:          time.Date(2017, 1, 22, 14, 00, 50, 0, time.UTC),
+			StartedAt:          time.Date(2018, 11, 6, 12, 9, 17, 0, time.UTC),
+			HeartbeatTimestamp: time.Date(2019, 1, 9, 10, 28, 50, 0, time.UTC),
+			Host:               "os-ctrl-03",
+			Topic:              "l3_agent",
+			HAState:            "active",
+			ResourceVersions:   map[string]interface{}{},
+		},
+	}
+	th.CheckDeepEquals(t, expected, actual)
 }

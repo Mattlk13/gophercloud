@@ -35,7 +35,7 @@ func CreateShare(t *testing.T, client *gophercloud.ServiceClient) (*shares.Share
 		return nil, err
 	}
 
-	err = waitForStatus(t, client, share.ID, "available", 600)
+	err = waitForStatus(t, client, share.ID, "available")
 	if err != nil {
 		t.Logf("Failed to get %s share status", share.ID)
 		DeleteShare(t, client, share)
@@ -85,10 +85,13 @@ func GetAccessRightsSlice(t *testing.T, client *gophercloud.ServiceClient, share
 func DeleteShare(t *testing.T, client *gophercloud.ServiceClient, share *shares.Share) {
 	err := shares.Delete(client, share.ID).ExtractErr()
 	if err != nil {
+		if _, ok := err.(gophercloud.ErrDefault404); ok {
+			return
+		}
 		t.Errorf("Unable to delete share %s: %v", share.ID, err)
 	}
 
-	err = waitForStatus(t, client, share.ID, "deleted", 600)
+	err = waitForStatus(t, client, share.ID, "deleted")
 	if err != nil {
 		t.Errorf("Failed to wait for 'deleted' status for %s share: %v", share.ID, err)
 	} else {
@@ -126,8 +129,8 @@ func PrintMessages(t *testing.T, c *gophercloud.ServiceClient, id string) error 
 	return nil
 }
 
-func waitForStatus(t *testing.T, c *gophercloud.ServiceClient, id, status string, secs int) error {
-	err := gophercloud.WaitFor(secs, func() (bool, error) {
+func waitForStatus(t *testing.T, c *gophercloud.ServiceClient, id, status string) error {
+	err := tools.WaitFor(func() (bool, error) {
 		current, err := shares.Get(c, id).Extract()
 		if err != nil {
 			if _, ok := err.(gophercloud.ErrDefault404); ok {

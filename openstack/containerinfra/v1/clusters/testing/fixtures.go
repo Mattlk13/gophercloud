@@ -38,20 +38,22 @@ var ExpectedCluster = clusters.Cluster{
 			Rel:  "bookmark",
 		},
 	},
-	KeyPair:           "my-keypair",
-	MasterAddresses:   []string{"172.24.4.6"},
-	MasterCount:       1,
-	Name:              "k8s",
-	NodeAddresses:     []string{"172.24.4.13"},
-	NodeCount:         1,
-	StackID:           "9c6f1169-7300-4d08-a444-d2be38758719",
-	Status:            "CREATE_COMPLETE",
-	StatusReason:      "Stack CREATE completed successfully",
-	UpdatedAt:         time.Date(2016, 8, 29, 6, 53, 24, 0, time.UTC),
-	UUID:              clusterUUID,
-	FloatingIPEnabled: true,
-	FixedNetwork:      "private_network",
-	FixedSubnet:       "private_subnet",
+	KeyPair:            "my-keypair",
+	MasterAddresses:    []string{"172.24.4.6"},
+	MasterCount:        1,
+	Name:               "k8s",
+	NodeAddresses:      []string{"172.24.4.13"},
+	NodeCount:          1,
+	StackID:            "9c6f1169-7300-4d08-a444-d2be38758719",
+	Status:             "CREATE_COMPLETE",
+	StatusReason:       "Stack CREATE completed successfully",
+	UpdatedAt:          time.Date(2016, 8, 29, 6, 53, 24, 0, time.UTC),
+	UUID:               clusterUUID,
+	FloatingIPEnabled:  true,
+	FixedNetwork:       "private_network",
+	FixedSubnet:        "private_subnet",
+	HealthStatus:       "HEALTHY",
+	HealthStatusReason: map[string]interface{}{"api": "ok"},
 }
 
 var ExpectedCluster2 = clusters.Cluster{
@@ -71,20 +73,22 @@ var ExpectedCluster2 = clusters.Cluster{
 			Rel:  "bookmark",
 		},
 	},
-	KeyPair:           "my-keypair",
-	MasterAddresses:   []string{"172.24.4.6"},
-	MasterCount:       1,
-	Name:              "k8s",
-	NodeAddresses:     []string{"172.24.4.13"},
-	NodeCount:         1,
-	StackID:           "9c6f1169-7300-4d08-a444-d2be38758719",
-	Status:            "CREATE_COMPLETE",
-	StatusReason:      "Stack CREATE completed successfully",
-	UpdatedAt:         time.Date(2016, 8, 29, 6, 53, 24, 0, time.UTC),
-	UUID:              clusterUUID2,
-	FloatingIPEnabled: true,
-	FixedNetwork:      "private_network",
-	FixedSubnet:       "private_subnet",
+	KeyPair:            "my-keypair",
+	MasterAddresses:    []string{"172.24.4.6"},
+	MasterCount:        1,
+	Name:               "k8s",
+	NodeAddresses:      []string{"172.24.4.13"},
+	NodeCount:          1,
+	StackID:            "9c6f1169-7300-4d08-a444-d2be38758719",
+	Status:             "CREATE_COMPLETE",
+	StatusReason:       "Stack CREATE completed successfully",
+	UpdatedAt:          time.Date(2016, 8, 29, 6, 53, 24, 0, time.UTC),
+	UUID:               clusterUUID2,
+	FloatingIPEnabled:  true,
+	FixedNetwork:       "private_network",
+	FixedSubnet:        "private_subnet",
+	HealthStatus:       "HEALTHY",
+	HealthStatusReason: map[string]interface{}{"api": "ok"},
 }
 
 var ExpectedClusterUUID = clusterUUID
@@ -149,7 +153,9 @@ var ClusterGetResponse = fmt.Sprintf(`
 		"name":"k8s",
 		"floating_ip_enabled": true,
 		"fixed_network": "private_network",
-		"fixed_subnet": "private_subnet"
+		"fixed_subnet": "private_subnet",
+		"health_status": "HEALTHY",
+		"health_status_reason": {"api": "ok"}
 }`, clusterUUID)
 
 var ClusterListResponse = fmt.Sprintf(`
@@ -189,7 +195,9 @@ var ClusterListResponse = fmt.Sprintf(`
 			"uuid":"%s",
 			"floating_ip_enabled": true,
 			"fixed_network": "private_network",
-			"fixed_subnet": "private_subnet"
+			"fixed_subnet": "private_subnet",
+			"health_status": "HEALTHY",
+			"health_status_reason": {"api": "ok"}
 		},
 		{
 			"api_address":"https://172.24.4.6:6443",
@@ -225,7 +233,9 @@ var ClusterListResponse = fmt.Sprintf(`
 			"uuid":"%s",
 			"floating_ip_enabled": true,
 			"fixed_network": "private_network",
-			"fixed_subnet": "private_subnet"
+			"fixed_subnet": "private_subnet",
+			"health_status": "HEALTHY",
+			"health_status_reason": {"api": "ok"}
 		}
 	]
 }`, clusterUUID, clusterUUID2)
@@ -276,6 +286,24 @@ func HandleUpdateClusterSuccessfully(t *testing.T) {
 	})
 }
 
+var UpgradeResponse = fmt.Sprintf(`
+{
+	"uuid":"%s"
+}`, clusterUUID)
+
+func HandleUpgradeClusterSuccessfully(t *testing.T) {
+	th.Mux.HandleFunc("/v1/clusters/"+clusterUUID+"/actions/upgrade", func(w http.ResponseWriter, r *http.Request) {
+		th.TestMethod(t, r, "POST")
+		th.TestHeader(t, r, "X-Auth-Token", fake.TokenID)
+
+		w.Header().Add("Content-Type", "application/json")
+		w.Header().Add("X-OpenStack-Request-Id", requestUUID)
+		w.WriteHeader(http.StatusAccepted)
+
+		fmt.Fprint(w, UpgradeResponse)
+	})
+}
+
 func HandleDeleteClusterSuccessfully(t *testing.T) {
 	th.Mux.HandleFunc("/v1/clusters/"+clusterUUID, func(w http.ResponseWriter, r *http.Request) {
 		th.TestMethod(t, r, "DELETE")
@@ -289,8 +317,7 @@ func HandleDeleteClusterSuccessfully(t *testing.T) {
 
 var ResizeResponse = fmt.Sprintf(`
 {
-	"uuid": "%s",
-	"node_count": 2
+	"uuid": "%s"
 }`, clusterUUID)
 
 func HandleResizeClusterSuccessfully(t *testing.T) {

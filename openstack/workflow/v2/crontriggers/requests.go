@@ -66,21 +66,23 @@ func Create(client *gophercloud.ServiceClient, opts CreateOptsBuilder) (r Create
 		return
 	}
 
-	_, r.Err = client.Post(createURL(client), b, &r.Body, nil)
-
+	resp, err := client.Post(createURL(client), b, &r.Body, nil)
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
 	return
 }
 
 // Delete deletes the specified cron trigger.
 func Delete(client *gophercloud.ServiceClient, id string) (r DeleteResult) {
-	_, r.Err = client.Delete(deleteURL(client, id), nil)
+	resp, err := client.Delete(deleteURL(client, id), nil)
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
 	return
 }
 
 // Get retrieves details of a single cron trigger.
 // Use Extract to convert its result into an CronTrigger.
 func Get(client *gophercloud.ServiceClient, id string) (r GetResult) {
-	_, r.Err = client.Get(getURL(client, id), &r.Body, nil)
+	resp, err := client.Get(getURL(client, id), &r.Body, nil)
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
 	return
 }
 
@@ -124,7 +126,7 @@ type ListOpts struct {
 	// It can be "asc" or "desc" (default).
 	SortDirs string `q:"sort_dirs"`
 	// SortKeys allows to sort by one of the cron trigger attributes.
-	SortKeys string `q:"sort_key"`
+	SortKeys string `q:"sort_keys"`
 	// Marker and Limit control paging.
 	// Marker instructs List where to start listing from.
 	Marker string `q:"marker"`

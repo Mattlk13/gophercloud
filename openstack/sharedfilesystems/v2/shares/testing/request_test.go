@@ -79,19 +79,20 @@ func TestGet(t *testing.T) {
 			"project": "my_app",
 			"aim":     "doc",
 		},
-		Status:                   "available",
-		Description:              "My custom share London",
-		Host:                     "manila2@generic1#GENERIC1",
-		HasReplicas:              false,
-		ReplicationType:          "",
-		TaskState:                "",
-		SnapshotSupport:          true,
-		Name:                     "my_test_share",
-		CreatedAt:                time.Date(2015, time.September, 18, 10, 25, 24, 0, time.UTC),
-		ShareProto:               "NFS",
-		VolumeType:               "default",
-		SourceCgsnapshotMemberID: "",
-		IsPublic:                 true,
+		Status:                         "available",
+		Description:                    "My custom share London",
+		Host:                           "manila2@generic1#GENERIC1",
+		HasReplicas:                    false,
+		ReplicationType:                "",
+		TaskState:                      "",
+		SnapshotSupport:                true,
+		CreateShareFromSnapshotSupport: true,
+		Name:                           "my_test_share",
+		CreatedAt:                      time.Date(2015, time.September, 18, 10, 25, 24, 0, time.UTC),
+		ShareProto:                     "NFS",
+		VolumeType:                     "default",
+		SourceCgsnapshotMemberID:       "",
+		IsPublic:                       true,
 		Links: []map[string]string{
 			{
 				"href": "http://172.18.198.54:8786/v2/16e1ab15c35a457e9c2b2aa189f544e1/shares/011d21e2-fbc3-4e4a-9993-9ea223f73264",
@@ -134,19 +135,20 @@ func TestListDetail(t *testing.T) {
 				"project": "my_app",
 				"aim":     "doc",
 			},
-			Status:                   "available",
-			Description:              "My custom share London",
-			Host:                     "manila2@generic1#GENERIC1",
-			HasReplicas:              false,
-			ReplicationType:          "",
-			TaskState:                "",
-			SnapshotSupport:          true,
-			Name:                     "my_test_share",
-			CreatedAt:                time.Date(2015, time.September, 18, 10, 25, 24, 0, time.UTC),
-			ShareProto:               "NFS",
-			VolumeType:               "default",
-			SourceCgsnapshotMemberID: "",
-			IsPublic:                 true,
+			Status:                         "available",
+			Description:                    "My custom share London",
+			Host:                           "manila2@generic1#GENERIC1",
+			HasReplicas:                    false,
+			ReplicationType:                "",
+			TaskState:                      "",
+			SnapshotSupport:                true,
+			CreateShareFromSnapshotSupport: true,
+			Name:                           "my_test_share",
+			CreatedAt:                      time.Date(2015, time.September, 18, 10, 25, 24, 0, time.UTC),
+			ShareProto:                     "NFS",
+			VolumeType:                     "default",
+			SourceCgsnapshotMemberID:       "",
+			IsPublic:                       true,
 			Links: []map[string]string{
 				{
 					"href": "http://172.18.198.54:8786/v2/16e1ab15c35a457e9c2b2aa189f544e1/shares/011d21e2-fbc3-4e4a-9993-9ea223f73264",
@@ -161,17 +163,17 @@ func TestListDetail(t *testing.T) {
 	})
 }
 
-func TestGetExportLocationsSuccess(t *testing.T) {
+func TestListExportLocationsSuccess(t *testing.T) {
 	th.SetupHTTP()
 	defer th.TeardownHTTP()
 
-	MockGetExportLocationsResponse(t)
+	MockListExportLocationsResponse(t)
 
 	c := client.ServiceClient()
-	// Client c must have Microversion set; minimum supported microversion for Get Export Locations is 2.14
-	c.Microversion = "2.14"
+	// Client c must have Microversion set; minimum supported microversion for List Export Locations is 2.9
+	c.Microversion = "2.9"
 
-	s, err := shares.GetExportLocations(c, shareID).Extract()
+	s, err := shares.ListExportLocations(c, shareID).Extract()
 
 	th.AssertNoErr(t, err)
 	th.AssertDeepEquals(t, s, []shares.ExportLocation{
@@ -182,6 +184,28 @@ func TestGetExportLocationsSuccess(t *testing.T) {
 			ID:              "80ed63fc-83bc-4afc-b881-da4a345ac83d",
 			Preferred:       false,
 		},
+	})
+}
+
+func TestGetExportLocationSuccess(t *testing.T) {
+	th.SetupHTTP()
+	defer th.TeardownHTTP()
+
+	MockGetExportLocationResponse(t)
+
+	c := client.ServiceClient()
+	// Client c must have Microversion set; minimum supported microversion for Get Export Location is 2.9
+	c.Microversion = "2.9"
+
+	s, err := shares.GetExportLocation(c, shareID, "80ed63fc-83bc-4afc-b881-da4a345ac83d").Extract()
+
+	th.AssertNoErr(t, err)
+	th.AssertDeepEquals(t, s, &shares.ExportLocation{
+		Path:            "127.0.0.1:/var/lib/manila/mnt/share-9a922036-ad26-4d27-b955-7a1e285fa74d",
+		ShareInstanceID: "011d21e2-fbc3-4e4a-9993-9ea223f73264",
+		IsAdminOnly:     false,
+		ID:              "80ed63fc-83bc-4afc-b881-da4a345ac83d",
+		Preferred:       false,
 	})
 }
 
@@ -345,5 +369,61 @@ func TestUnsetMetadataSuccess(t *testing.T) {
 	c := client.ServiceClient()
 
 	err := shares.DeleteMetadatum(c, shareID, "foo").ExtractErr()
+	th.AssertNoErr(t, err)
+}
+
+func TestRevertSuccess(t *testing.T) {
+	th.SetupHTTP()
+	defer th.TeardownHTTP()
+
+	MockRevertResponse(t)
+
+	c := client.ServiceClient()
+	// Client c must have Microversion set; minimum supported microversion for Revert is 2.27
+	c.Microversion = "2.27"
+
+	err := shares.Revert(c, shareID, &shares.RevertOpts{SnapshotID: "ddeac769-9742-497f-b985-5bcfa94a3fd6"}).ExtractErr()
+	th.AssertNoErr(t, err)
+}
+
+func TestResetStatusSuccess(t *testing.T) {
+	th.SetupHTTP()
+	defer th.TeardownHTTP()
+
+	MockResetStatusResponse(t)
+
+	c := client.ServiceClient()
+	// Client c must have Microversion set; minimum supported microversion for ResetStatus is 2.7
+	c.Microversion = "2.7"
+
+	err := shares.ResetStatus(c, shareID, &shares.ResetStatusOpts{Status: "error"}).ExtractErr()
+	th.AssertNoErr(t, err)
+}
+
+func TestForceDeleteSuccess(t *testing.T) {
+	th.SetupHTTP()
+	defer th.TeardownHTTP()
+
+	MockForceDeleteResponse(t)
+
+	c := client.ServiceClient()
+	// Client c must have Microversion set; minimum supported microversion for ForceDelete is 2.7
+	c.Microversion = "2.7"
+
+	err := shares.ForceDelete(c, shareID).ExtractErr()
+	th.AssertNoErr(t, err)
+}
+
+func TestUnmanageSuccess(t *testing.T) {
+	th.SetupHTTP()
+	defer th.TeardownHTTP()
+
+	MockUnmanageResponse(t)
+
+	c := client.ServiceClient()
+	// Client c must have Microversion set; minimum supported microversion for Unmanage is 2.7
+	c.Microversion = "2.7"
+
+	err := shares.Unmanage(c, shareID).ExtractErr()
 	th.AssertNoErr(t, err)
 }

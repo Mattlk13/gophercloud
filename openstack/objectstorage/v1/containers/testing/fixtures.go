@@ -107,6 +107,7 @@ func HandleCreateContainerSuccessfully(t *testing.T) {
 		w.Header().Set("Content-Type", "text/html; charset=UTF-8")
 		w.Header().Set("Date", "Wed, 17 Aug 2016 19:25:43 UTC")
 		w.Header().Set("X-Trans-Id", "tx554ed59667a64c61866f1-0058b4ba37")
+		w.Header().Set("X-Storage-Policy", "multi-region-three-replicas")
 		w.WriteHeader(http.StatusNoContent)
 	})
 }
@@ -119,6 +120,35 @@ func HandleDeleteContainerSuccessfully(t *testing.T) {
 		th.TestHeader(t, r, "X-Auth-Token", fake.TokenID)
 		th.TestHeader(t, r, "Accept", "application/json")
 		w.WriteHeader(http.StatusNoContent)
+	})
+}
+
+const bulkDeleteResponse = `
+{
+    "Response Status": "foo",
+    "Response Body": "bar",
+    "Errors": [],
+    "Number Deleted": 2,
+    "Number Not Found": 0
+}
+`
+
+// HandleBulkDeleteSuccessfully creates an HTTP handler at `/` on the test
+// handler mux that responds with a `Delete` response.
+func HandleBulkDeleteSuccessfully(t *testing.T) {
+	th.Mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		th.TestMethod(t, r, "POST")
+		th.TestHeader(t, r, "X-Auth-Token", fake.TokenID)
+		th.TestHeader(t, r, "Accept", "application/json")
+		th.TestHeader(t, r, "Content-Type", "text/plain")
+		th.TestFormValues(t, r, map[string]string{
+			"bulk-delete": "true",
+		})
+		th.TestBody(t, r, "testContainer1\ntestContainer2\n")
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprintf(w, bulkDeleteResponse)
 	})
 }
 

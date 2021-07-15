@@ -67,6 +67,8 @@ func TestCreateListener(t *testing.T) {
 		DefaultPoolID:          "41efe233-7591-43c5-9cf7-923964759f9e",
 		ProtocolPort:           3306,
 		InsertHeaders:          map[string]string{"X-Forwarded-For": "true"},
+		AllowedCIDRs:           []string{"192.0.2.0/24", "198.51.100.0/24"},
+		TLSVersions:            []listeners.TLSVersion{"TLSv1.2"},
 	}).Extract()
 	th.AssertNoErr(t, err)
 
@@ -129,6 +131,11 @@ func TestUpdateListener(t *testing.T) {
 	i181000 := 181000
 	name := "NewListenerName"
 	defaultPoolID := ""
+	insertHeaders := map[string]string{
+		"X-Forwarded-For":  "true",
+		"X-Forwarded-Port": "false",
+	}
+	tlsVersions := []listeners.TLSVersion{"TLSv1.2", "TLSv1.3"}
 	actual, err := listeners.Update(client, "4ec89087-d057-4e2c-911f-60a3b47ee304", listeners.UpdateOpts{
 		Name:                 &name,
 		ConnLimit:            &i1001,
@@ -137,6 +144,8 @@ func TestUpdateListener(t *testing.T) {
 		TimeoutClientData:    &i181000,
 		TimeoutMemberConnect: &i181000,
 		TimeoutTCPInspect:    &i181000,
+		InsertHeaders:        &insertHeaders,
+		TLSVersions:          &tlsVersions,
 	}).Extract()
 	if err != nil {
 		t.Fatalf("Unexpected Update error: %v", err)
