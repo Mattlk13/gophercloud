@@ -1,14 +1,16 @@
 package services
 
 import (
-	"github.com/gophercloud/gophercloud"
-	"github.com/gophercloud/gophercloud/pagination"
+	"context"
+
+	"github.com/gophercloud/gophercloud/v2"
+	"github.com/gophercloud/gophercloud/v2/pagination"
 )
 
 // CreateOptsBuilder allows extensions to add additional parameters to the
 // Create request.
 type CreateOptsBuilder interface {
-	ToServiceCreateMap() (map[string]interface{}, error)
+	ToServiceCreateMap() (map[string]any, error)
 }
 
 // CreateOpts contains all the values needed to create a new VPN service
@@ -38,33 +40,35 @@ type CreateOpts struct {
 }
 
 // ToServiceCreateMap casts a CreateOpts struct to a map.
-func (opts CreateOpts) ToServiceCreateMap() (map[string]interface{}, error) {
+func (opts CreateOpts) ToServiceCreateMap() (map[string]any, error) {
 	return gophercloud.BuildRequestBody(opts, "vpnservice")
 }
 
 // Create accepts a CreateOpts struct and uses the values to create a new
 // VPN service.
-func Create(c *gophercloud.ServiceClient, opts CreateOptsBuilder) (r CreateResult) {
+func Create(ctx context.Context, c *gophercloud.ServiceClient, opts CreateOptsBuilder) (r CreateResult) {
 	b, err := opts.ToServiceCreateMap()
 	if err != nil {
 		r.Err = err
 		return
 	}
-	_, r.Err = c.Post(rootURL(c), b, &r.Body, nil)
+	resp, err := c.Post(ctx, rootURL(c), b, &r.Body, nil)
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
 	return
 }
 
 // Delete will permanently delete a particular VPN service based on its
 // unique ID.
-func Delete(c *gophercloud.ServiceClient, id string) (r DeleteResult) {
-	_, r.Err = c.Delete(resourceURL(c, id), nil)
+func Delete(ctx context.Context, c *gophercloud.ServiceClient, id string) (r DeleteResult) {
+	resp, err := c.Delete(ctx, resourceURL(c, id), nil)
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
 	return
 }
 
 // UpdateOptsBuilder allows extensions to add additional parameters to the
 // Update request.
 type UpdateOptsBuilder interface {
-	ToServiceUpdateMap() (map[string]interface{}, error)
+	ToServiceUpdateMap() (map[string]any, error)
 }
 
 // UpdateOpts contains the values used when updating a VPN service
@@ -80,20 +84,21 @@ type UpdateOpts struct {
 }
 
 // ToServiceUpdateMap casts aa UodateOpts struct to a map.
-func (opts UpdateOpts) ToServiceUpdateMap() (map[string]interface{}, error) {
+func (opts UpdateOpts) ToServiceUpdateMap() (map[string]any, error) {
 	return gophercloud.BuildRequestBody(opts, "vpnservice")
 }
 
 // Update allows VPN services to be updated.
-func Update(c *gophercloud.ServiceClient, id string, opts UpdateOptsBuilder) (r UpdateResult) {
+func Update(ctx context.Context, c *gophercloud.ServiceClient, id string, opts UpdateOptsBuilder) (r UpdateResult) {
 	b, err := opts.ToServiceUpdateMap()
 	if err != nil {
 		r.Err = err
 		return
 	}
-	_, r.Err = c.Put(resourceURL(c, id), b, &r.Body, &gophercloud.RequestOpts{
+	resp, err := c.Put(ctx, resourceURL(c, id), b, &r.Body, &gophercloud.RequestOpts{
 		OkCodes: []int{200},
 	})
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
 	return
 }
 
@@ -144,7 +149,8 @@ func List(c *gophercloud.ServiceClient, opts ListOptsBuilder) pagination.Pager {
 }
 
 // Get retrieves a particular VPN service based on its unique ID.
-func Get(c *gophercloud.ServiceClient, id string) (r GetResult) {
-	_, r.Err = c.Get(resourceURL(c, id), &r.Body, nil)
+func Get(ctx context.Context, c *gophercloud.ServiceClient, id string) (r GetResult) {
+	resp, err := c.Get(ctx, resourceURL(c, id), &r.Body, nil)
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
 	return
 }

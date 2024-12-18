@@ -1,7 +1,10 @@
-module github.com/gophercloud/gophercloud
+module github.com/gophercloud/gophercloud/v2
+
+go 1.22
 
 require (
-	golang.org/x/crypto v0.0.0-20190211182817-74369b46fc67
-	golang.org/x/sys v0.0.0-20190209173611-3b5209105503 // indirect
-	gopkg.in/yaml.v2 v2.2.2
+	golang.org/x/crypto v0.31.0
+	gopkg.in/yaml.v2 v2.4.0
 )
+
+require golang.org/x/sys v0.28.0 // indirect

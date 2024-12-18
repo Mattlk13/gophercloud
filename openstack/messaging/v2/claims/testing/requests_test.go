@@ -1,11 +1,12 @@
 package testing
 
 import (
+	"context"
 	"testing"
 
-	"github.com/gophercloud/gophercloud/openstack/messaging/v2/claims"
-	th "github.com/gophercloud/gophercloud/testhelper"
-	fake "github.com/gophercloud/gophercloud/testhelper/client"
+	"github.com/gophercloud/gophercloud/v2/openstack/messaging/v2/claims"
+	th "github.com/gophercloud/gophercloud/v2/testhelper"
+	fake "github.com/gophercloud/gophercloud/v2/testhelper/client"
 )
 
 func TestCreate(t *testing.T) {
@@ -19,9 +20,26 @@ func TestCreate(t *testing.T) {
 		Limit: 10,
 	}
 
-	actual, err := claims.Create(fake.ServiceClient(), QueueName, createOpts).Extract()
+	actual, err := claims.Create(context.TODO(), fake.ServiceClient(), QueueName, createOpts).Extract()
 	th.AssertNoErr(t, err)
 	th.CheckDeepEquals(t, CreatedClaim, actual)
+}
+
+func TestCreateNoContent(t *testing.T) {
+	th.SetupHTTP()
+	defer th.TeardownHTTP()
+	HandleCreateNoContent(t)
+
+	createOpts := claims.CreateOpts{
+		TTL:   3600,
+		Grace: 3600,
+		Limit: 10,
+	}
+
+	actual, err := claims.Create(context.TODO(), fake.ServiceClient(), QueueName, createOpts).Extract()
+	th.AssertNoErr(t, err)
+	var expected []claims.Messages
+	th.CheckDeepEquals(t, expected, actual)
 }
 
 func TestGet(t *testing.T) {
@@ -29,7 +47,7 @@ func TestGet(t *testing.T) {
 	defer th.TeardownHTTP()
 	HandleGetSuccessfully(t)
 
-	actual, err := claims.Get(fake.ServiceClient(), QueueName, ClaimID).Extract()
+	actual, err := claims.Get(context.TODO(), fake.ServiceClient(), QueueName, ClaimID).Extract()
 	th.AssertNoErr(t, err)
 	th.CheckDeepEquals(t, &FirstClaim, actual)
 }
@@ -44,7 +62,7 @@ func TestUpdate(t *testing.T) {
 		TTL:   1200,
 	}
 
-	err := claims.Update(fake.ServiceClient(), QueueName, ClaimID, updateOpts).ExtractErr()
+	err := claims.Update(context.TODO(), fake.ServiceClient(), QueueName, ClaimID, updateOpts).ExtractErr()
 	th.AssertNoErr(t, err)
 }
 
@@ -53,6 +71,6 @@ func TestDelete(t *testing.T) {
 	defer th.TeardownHTTP()
 	HandleDeleteSuccessfully(t)
 
-	err := claims.Delete(fake.ServiceClient(), QueueName, ClaimID).ExtractErr()
+	err := claims.Delete(context.TODO(), fake.ServiceClient(), QueueName, ClaimID).ExtractErr()
 	th.AssertNoErr(t, err)
 }

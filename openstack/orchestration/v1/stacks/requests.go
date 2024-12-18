@@ -1,10 +1,12 @@
 package stacks
 
 import (
+	"context"
+	"fmt"
 	"strings"
 
-	"github.com/gophercloud/gophercloud"
-	"github.com/gophercloud/gophercloud/pagination"
+	"github.com/gophercloud/gophercloud/v2"
+	"github.com/gophercloud/gophercloud/v2/pagination"
 )
 
 // CreateOptsBuilder is the interface options structs have to satisfy in order
@@ -12,7 +14,7 @@ import (
 // extensions decorate or modify the common logic, it is useful for them to
 // satisfy a basic interface in order for them to be used.
 type CreateOptsBuilder interface {
-	ToStackCreateMap() (map[string]interface{}, error)
+	ToStackCreateMap() (map[string]any, error)
 }
 
 // CreateOpts is the common options struct used in this package's Create
@@ -30,7 +32,7 @@ type CreateOpts struct {
 	// A structure that contains details for the environment of the stack.
 	EnvironmentOpts *Environment `json:"-"`
 	// User-defined parameters to pass to the template.
-	Parameters map[string]interface{} `json:"parameters,omitempty"`
+	Parameters map[string]any `json:"parameters,omitempty"`
 	// The timeout for stack creation in minutes.
 	Timeout int `json:"timeout_mins,omitempty"`
 	// A list of tags to assosciate with the Stack
@@ -38,7 +40,7 @@ type CreateOpts struct {
 }
 
 // ToStackCreateMap casts a CreateOpts struct to a map.
-func (opts CreateOpts) ToStackCreateMap() (map[string]interface{}, error) {
+func (opts CreateOpts) ToStackCreateMap() (map[string]any, error) {
 	b, err := gophercloud.BuildRequestBody(opts, "")
 	if err != nil {
 		return nil, err
@@ -51,7 +53,6 @@ func (opts CreateOpts) ToStackCreateMap() (map[string]interface{}, error) {
 	if err := opts.TemplateOpts.getFileContents(opts.TemplateOpts.Parsed, ignoreIfTemplate, true); err != nil {
 		return nil, err
 	}
-	opts.TemplateOpts.fixFileRefs()
 	b["template"] = string(opts.TemplateOpts.Bin)
 
 	files := make(map[string]string)
@@ -66,7 +67,6 @@ func (opts CreateOpts) ToStackCreateMap() (map[string]interface{}, error) {
 		if err := opts.EnvironmentOpts.getRRFileContents(ignoreIfEnvironment); err != nil {
 			return nil, err
 		}
-		opts.EnvironmentOpts.fixFileRefs()
 		for k, v := range opts.EnvironmentOpts.Files {
 			files[k] = v
 		}
@@ -86,13 +86,14 @@ func (opts CreateOpts) ToStackCreateMap() (map[string]interface{}, error) {
 
 // Create accepts a CreateOpts struct and creates a new stack using the values
 // provided.
-func Create(c *gophercloud.ServiceClient, opts CreateOptsBuilder) (r CreateResult) {
+func Create(ctx context.Context, c *gophercloud.ServiceClient, opts CreateOptsBuilder) (r CreateResult) {
 	b, err := opts.ToStackCreateMap()
 	if err != nil {
-		r.Err = err
+		r.Err = fmt.Errorf("error creating the options map: %w", err)
 		return
 	}
-	_, r.Err = c.Post(createURL(c), b, &r.Body, nil)
+	resp, err := c.Post(ctx, createURL(c), b, &r.Body, nil)
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
 	return
 }
 
@@ -101,7 +102,7 @@ func Create(c *gophercloud.ServiceClient, opts CreateOptsBuilder) (r CreateResul
 // extensions decorate or modify the common logic, it is useful for them to
 // satisfy a basic interface in order for them to be used.
 type AdoptOptsBuilder interface {
-	ToStackAdoptMap() (map[string]interface{}, error)
+	ToStackAdoptMap() (map[string]any, error)
 }
 
 // AdoptOpts is the common options struct used in this package's Adopt
@@ -127,11 +128,11 @@ type AdoptOpts struct {
 	// A structure that contains details for the environment of the stack.
 	EnvironmentOpts *Environment `json:"-"`
 	// User-defined parameters to pass to the template.
-	Parameters map[string]interface{} `json:"parameters,omitempty"`
+	Parameters map[string]any `json:"parameters,omitempty"`
 }
 
 // ToStackAdoptMap casts a CreateOpts struct to a map.
-func (opts AdoptOpts) ToStackAdoptMap() (map[string]interface{}, error) {
+func (opts AdoptOpts) ToStackAdoptMap() (map[string]any, error) {
 	b, err := gophercloud.BuildRequestBody(opts, "")
 	if err != nil {
 		return nil, err
@@ -144,7 +145,6 @@ func (opts AdoptOpts) ToStackAdoptMap() (map[string]interface{}, error) {
 	if err := opts.TemplateOpts.getFileContents(opts.TemplateOpts.Parsed, ignoreIfTemplate, true); err != nil {
 		return nil, err
 	}
-	opts.TemplateOpts.fixFileRefs()
 	b["template"] = string(opts.TemplateOpts.Bin)
 
 	files := make(map[string]string)
@@ -159,7 +159,6 @@ func (opts AdoptOpts) ToStackAdoptMap() (map[string]interface{}, error) {
 		if err := opts.EnvironmentOpts.getRRFileContents(ignoreIfEnvironment); err != nil {
 			return nil, err
 		}
-		opts.EnvironmentOpts.fixFileRefs()
 		for k, v := range opts.EnvironmentOpts.Files {
 			files[k] = v
 		}
@@ -175,13 +174,14 @@ func (opts AdoptOpts) ToStackAdoptMap() (map[string]interface{}, error) {
 
 // Adopt accepts an AdoptOpts struct and creates a new stack using the resources
 // from another stack.
-func Adopt(c *gophercloud.ServiceClient, opts AdoptOptsBuilder) (r AdoptResult) {
+func Adopt(ctx context.Context, c *gophercloud.ServiceClient, opts AdoptOptsBuilder) (r AdoptResult) {
 	b, err := opts.ToStackAdoptMap()
 	if err != nil {
 		r.Err = err
 		return
 	}
-	_, r.Err = c.Post(adoptURL(c), b, &r.Body, nil)
+	resp, err := c.Post(ctx, adoptURL(c), b, &r.Body, nil)
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
 	return
 }
 
@@ -251,6 +251,9 @@ type ListOpts struct {
 	// ShowNested set to `true` to include nested stacks in the list.
 	ShowNested bool `q:"show_nested"`
 
+	// ShowHidden set to `true` to include hiddened stacks in the list.
+	ShowHidden bool `q:"show_hidden"`
+
 	// Tags lists stacks that contain one or more simple string tags.
 	Tags string `q:"tags"`
 
@@ -292,27 +295,29 @@ func List(c *gophercloud.ServiceClient, opts ListOptsBuilder) pagination.Pager {
 }
 
 // Get retreives a stack based on the stack name and stack ID.
-func Get(c *gophercloud.ServiceClient, stackName, stackID string) (r GetResult) {
-	_, r.Err = c.Get(getURL(c, stackName, stackID), &r.Body, nil)
+func Get(ctx context.Context, c *gophercloud.ServiceClient, stackName, stackID string) (r GetResult) {
+	resp, err := c.Get(ctx, getURL(c, stackName, stackID), &r.Body, nil)
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
 	return
 }
 
 // Find retrieves a stack based on the stack name or stack ID.
-func Find(c *gophercloud.ServiceClient, stackIdentity string) (r GetResult) {
-	_, r.Err = c.Get(findURL(c, stackIdentity), &r.Body, nil)
+func Find(ctx context.Context, c *gophercloud.ServiceClient, stackIdentity string) (r GetResult) {
+	resp, err := c.Get(ctx, findURL(c, stackIdentity), &r.Body, nil)
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
 	return
 }
 
 // UpdateOptsBuilder is the interface options structs have to satisfy in order
 // to be used in the Update operation in this package.
 type UpdateOptsBuilder interface {
-	ToStackUpdateMap() (map[string]interface{}, error)
+	ToStackUpdateMap() (map[string]any, error)
 }
 
 // UpdatePatchOptsBuilder is the interface options structs have to satisfy in order
 // to be used in the UpdatePatch operation in this package
 type UpdatePatchOptsBuilder interface {
-	ToStackUpdatePatchMap() (map[string]interface{}, error)
+	ToStackUpdatePatchMap() (map[string]any, error)
 }
 
 // UpdateOpts contains the common options struct used in this package's Update
@@ -324,7 +329,7 @@ type UpdateOpts struct {
 	// A structure that contains details for the environment of the stack.
 	EnvironmentOpts *Environment `json:"-"`
 	// User-defined parameters to pass to the template.
-	Parameters map[string]interface{} `json:"parameters,omitempty"`
+	Parameters map[string]any `json:"parameters,omitempty"`
 	// The timeout for stack creation in minutes.
 	Timeout int `json:"timeout_mins,omitempty"`
 	// A list of tags to associate with the Stack
@@ -333,7 +338,7 @@ type UpdateOpts struct {
 
 // ToStackUpdateMap validates that a template was supplied and calls
 // the toStackUpdateMap private function.
-func (opts UpdateOpts) ToStackUpdateMap() (map[string]interface{}, error) {
+func (opts UpdateOpts) ToStackUpdateMap() (map[string]any, error) {
 	if opts.TemplateOpts == nil {
 		return nil, ErrTemplateRequired{}
 	}
@@ -342,12 +347,12 @@ func (opts UpdateOpts) ToStackUpdateMap() (map[string]interface{}, error) {
 
 // ToStackUpdatePatchMap calls the private function toStackUpdateMap
 // directly.
-func (opts UpdateOpts) ToStackUpdatePatchMap() (map[string]interface{}, error) {
+func (opts UpdateOpts) ToStackUpdatePatchMap() (map[string]any, error) {
 	return toStackUpdateMap(opts)
 }
 
 // ToStackUpdateMap casts a CreateOpts struct to a map.
-func toStackUpdateMap(opts UpdateOpts) (map[string]interface{}, error) {
+func toStackUpdateMap(opts UpdateOpts) (map[string]any, error) {
 	b, err := gophercloud.BuildRequestBody(opts, "")
 	if err != nil {
 		return nil, err
@@ -363,7 +368,6 @@ func toStackUpdateMap(opts UpdateOpts) (map[string]interface{}, error) {
 		if err := opts.TemplateOpts.getFileContents(opts.TemplateOpts.Parsed, ignoreIfTemplate, true); err != nil {
 			return nil, err
 		}
-		opts.TemplateOpts.fixFileRefs()
 		b["template"] = string(opts.TemplateOpts.Bin)
 
 		for k, v := range opts.TemplateOpts.Files {
@@ -378,7 +382,6 @@ func toStackUpdateMap(opts UpdateOpts) (map[string]interface{}, error) {
 		if err := opts.EnvironmentOpts.getRRFileContents(ignoreIfEnvironment); err != nil {
 			return nil, err
 		}
-		opts.EnvironmentOpts.fixFileRefs()
 		for k, v := range opts.EnvironmentOpts.Files {
 			files[k] = v
 		}
@@ -397,39 +400,44 @@ func toStackUpdateMap(opts UpdateOpts) (map[string]interface{}, error) {
 }
 
 // Update accepts an UpdateOpts struct and updates an existing stack using the
-//  http PUT verb with the values provided. opts.TemplateOpts is required.
-func Update(c *gophercloud.ServiceClient, stackName, stackID string, opts UpdateOptsBuilder) (r UpdateResult) {
+//
+//	http PUT verb with the values provided. opts.TemplateOpts is required.
+func Update(ctx context.Context, c *gophercloud.ServiceClient, stackName, stackID string, opts UpdateOptsBuilder) (r UpdateResult) {
 	b, err := opts.ToStackUpdateMap()
 	if err != nil {
 		r.Err = err
 		return
 	}
-	_, r.Err = c.Put(updateURL(c, stackName, stackID), b, nil, nil)
+	resp, err := c.Put(ctx, updateURL(c, stackName, stackID), b, nil, nil)
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
 	return
 }
 
 // Update accepts an UpdateOpts struct and updates an existing stack using the
-//  http PATCH verb with the values provided. opts.TemplateOpts is not required.
-func UpdatePatch(c *gophercloud.ServiceClient, stackName, stackID string, opts UpdatePatchOptsBuilder) (r UpdateResult) {
+//
+//	http PATCH verb with the values provided. opts.TemplateOpts is not required.
+func UpdatePatch(ctx context.Context, c *gophercloud.ServiceClient, stackName, stackID string, opts UpdatePatchOptsBuilder) (r UpdateResult) {
 	b, err := opts.ToStackUpdatePatchMap()
 	if err != nil {
 		r.Err = err
 		return
 	}
-	_, r.Err = c.Patch(updateURL(c, stackName, stackID), b, nil, nil)
+	resp, err := c.Patch(ctx, updateURL(c, stackName, stackID), b, nil, nil)
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
 	return
 }
 
 // Delete deletes a stack based on the stack name and stack ID.
-func Delete(c *gophercloud.ServiceClient, stackName, stackID string) (r DeleteResult) {
-	_, r.Err = c.Delete(deleteURL(c, stackName, stackID), nil)
+func Delete(ctx context.Context, c *gophercloud.ServiceClient, stackName, stackID string) (r DeleteResult) {
+	resp, err := c.Delete(ctx, deleteURL(c, stackName, stackID), nil)
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
 	return
 }
 
 // PreviewOptsBuilder is the interface options structs have to satisfy in order
 // to be used in the Preview operation in this package.
 type PreviewOptsBuilder interface {
-	ToStackPreviewMap() (map[string]interface{}, error)
+	ToStackPreviewMap() (map[string]any, error)
 }
 
 // PreviewOpts contains the common options struct used in this package's Preview
@@ -449,11 +457,11 @@ type PreviewOpts struct {
 	// A structure that contains details for the environment of the stack.
 	EnvironmentOpts *Environment `json:"-"`
 	// User-defined parameters to pass to the template.
-	Parameters map[string]interface{} `json:"parameters,omitempty"`
+	Parameters map[string]any `json:"parameters,omitempty"`
 }
 
 // ToStackPreviewMap casts a PreviewOpts struct to a map.
-func (opts PreviewOpts) ToStackPreviewMap() (map[string]interface{}, error) {
+func (opts PreviewOpts) ToStackPreviewMap() (map[string]any, error) {
 	b, err := gophercloud.BuildRequestBody(opts, "")
 	if err != nil {
 		return nil, err
@@ -466,7 +474,6 @@ func (opts PreviewOpts) ToStackPreviewMap() (map[string]interface{}, error) {
 	if err := opts.TemplateOpts.getFileContents(opts.TemplateOpts.Parsed, ignoreIfTemplate, true); err != nil {
 		return nil, err
 	}
-	opts.TemplateOpts.fixFileRefs()
 	b["template"] = string(opts.TemplateOpts.Bin)
 
 	files := make(map[string]string)
@@ -481,7 +488,6 @@ func (opts PreviewOpts) ToStackPreviewMap() (map[string]interface{}, error) {
 		if err := opts.EnvironmentOpts.getRRFileContents(ignoreIfEnvironment); err != nil {
 			return nil, err
 		}
-		opts.EnvironmentOpts.fixFileRefs()
 		for k, v := range opts.EnvironmentOpts.Files {
 			files[k] = v
 		}
@@ -497,24 +503,26 @@ func (opts PreviewOpts) ToStackPreviewMap() (map[string]interface{}, error) {
 
 // Preview accepts a PreviewOptsBuilder interface and creates a preview of a stack using the values
 // provided.
-func Preview(c *gophercloud.ServiceClient, opts PreviewOptsBuilder) (r PreviewResult) {
+func Preview(ctx context.Context, c *gophercloud.ServiceClient, opts PreviewOptsBuilder) (r PreviewResult) {
 	b, err := opts.ToStackPreviewMap()
 	if err != nil {
 		r.Err = err
 		return
 	}
-	_, r.Err = c.Post(previewURL(c), b, &r.Body, &gophercloud.RequestOpts{
+	resp, err := c.Post(ctx, previewURL(c), b, &r.Body, &gophercloud.RequestOpts{
 		OkCodes: []int{200},
 	})
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
 	return
 }
 
 // Abandon deletes the stack with the provided stackName and stackID, but leaves its
 // resources intact, and returns data describing the stack and its resources.
-func Abandon(c *gophercloud.ServiceClient, stackName, stackID string) (r AbandonResult) {
-	_, r.Err = c.Delete(abandonURL(c, stackName, stackID), &gophercloud.RequestOpts{
+func Abandon(ctx context.Context, c *gophercloud.ServiceClient, stackName, stackID string) (r AbandonResult) {
+	resp, err := c.Delete(ctx, abandonURL(c, stackName, stackID), &gophercloud.RequestOpts{
 		JSONResponse: &r.Body,
 		OkCodes:      []int{200},
 	})
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
 	return
 }

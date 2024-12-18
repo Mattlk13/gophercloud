@@ -1,15 +1,16 @@
 package testing
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"testing"
 
-	"github.com/gophercloud/gophercloud"
-	fake "github.com/gophercloud/gophercloud/openstack/networking/v2/common"
-	"github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/networkipavailabilities"
-	"github.com/gophercloud/gophercloud/pagination"
-	th "github.com/gophercloud/gophercloud/testhelper"
+	"github.com/gophercloud/gophercloud/v2"
+	fake "github.com/gophercloud/gophercloud/v2/openstack/networking/v2/common"
+	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/extensions/networkipavailabilities"
+	"github.com/gophercloud/gophercloud/v2/pagination"
+	th "github.com/gophercloud/gophercloud/v2/testhelper"
 )
 
 func TestList(t *testing.T) {
@@ -23,12 +24,12 @@ func TestList(t *testing.T) {
 		w.Header().Add("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 
-		fmt.Fprintf(w, NetworkIPAvailabilityListResult)
+		fmt.Fprint(w, NetworkIPAvailabilityListResult)
 	})
 
 	count := 0
 
-	err := networkipavailabilities.List(fake.ServiceClient(), networkipavailabilities.ListOpts{}).EachPage(func(page pagination.Page) (bool, error) {
+	err := networkipavailabilities.List(fake.ServiceClient(), networkipavailabilities.ListOpts{}).EachPage(context.TODO(), func(_ context.Context, page pagination.Page) (bool, error) {
 		count++
 		actual, err := networkipavailabilities.ExtractNetworkIPAvailabilities(page)
 		if err != nil {
@@ -64,10 +65,10 @@ func TestGet(t *testing.T) {
 		w.Header().Add("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 
-		fmt.Fprintf(w, NetworkIPAvailabilityGetResult)
+		fmt.Fprint(w, NetworkIPAvailabilityGetResult)
 	})
 
-	s, err := networkipavailabilities.Get(fake.ServiceClient(), "cf11ab78-2302-49fa-870f-851a08c7afb8").Extract()
+	s, err := networkipavailabilities.Get(context.TODO(), fake.ServiceClient(), "cf11ab78-2302-49fa-870f-851a08c7afb8").Extract()
 	th.AssertNoErr(t, err)
 
 	th.AssertEquals(t, s.NetworkID, "cf11ab78-2302-49fa-870f-851a08c7afb8")

@@ -2,12 +2,11 @@ package testing
 
 import (
 	"net/url"
-	"reflect"
 	"testing"
 	"time"
 
-	"github.com/gophercloud/gophercloud"
-	th "github.com/gophercloud/gophercloud/testhelper"
+	"github.com/gophercloud/gophercloud/v2"
+	th "github.com/gophercloud/gophercloud/v2/testhelper"
 )
 
 func TestMaybeString(t *testing.T) {
@@ -82,7 +81,7 @@ func TestBuildQueryString(t *testing.T) {
 	}
 	th.CheckDeepEquals(t, expected, actual)
 
-	_, err = gophercloud.BuildQueryString(map[string]interface{}{"Number": 4})
+	_, err = gophercloud.BuildQueryString(map[string]any{"Number": 4})
 	if err == nil {
 		t.Errorf("Expected error: 'Options type is not a struct'")
 	}
@@ -90,15 +89,17 @@ func TestBuildQueryString(t *testing.T) {
 
 func TestBuildHeaders(t *testing.T) {
 	testStruct := struct {
-		Accept string `h:"Accept"`
-		Num    int    `h:"Number" required:"true"`
-		Style  bool   `h:"Style"`
+		Accept        string `h:"Accept"`
+		ContentLength int64  `h:"Content-Length"`
+		Num           int    `h:"Number" required:"true"`
+		Style         bool   `h:"Style"`
 	}{
-		Accept: "application/json",
-		Num:    4,
-		Style:  true,
+		Accept:        "application/json",
+		ContentLength: 256,
+		Num:           4,
+		Style:         true,
 	}
-	expected := map[string]string{"Accept": "application/json", "Number": "4", "Style": "true"}
+	expected := map[string]string{"Accept": "application/json", "Number": "4", "Style": "true", "Content-Length": "256"}
 	actual, err := gophercloud.BuildHeaders(&testStruct)
 	th.CheckNoErr(t, err)
 	th.CheckDeepEquals(t, expected, actual)
@@ -109,7 +110,7 @@ func TestBuildHeaders(t *testing.T) {
 		t.Errorf("Expected error: 'Required header not set'")
 	}
 
-	_, err = gophercloud.BuildHeaders(map[string]interface{}{"Number": 4})
+	_, err = gophercloud.BuildHeaders(map[string]any{"Number": 4})
 	if err == nil {
 		t.Errorf("Expected error: 'Options type is not a struct'")
 	}
@@ -165,19 +166,21 @@ func TestBuildRequestBody(t *testing.T) {
 	}
 
 	var successCases = []struct {
+		name     string
 		opts     AuthOptions
-		expected map[string]interface{}
+		expected map[string]any
 	}{
 		{
+			"Password",
 			AuthOptions{
 				PasswordCredentials: &PasswordCredentials{
 					Username: "me",
 					Password: "swordfish",
 				},
 			},
-			map[string]interface{}{
-				"auth": map[string]interface{}{
-					"passwordCredentials": map[string]interface{}{
+			map[string]any{
+				"auth": map[string]any{
+					"passwordCredentials": map[string]any{
 						"password": "swordfish",
 						"username": "me",
 					},
@@ -185,14 +188,15 @@ func TestBuildRequestBody(t *testing.T) {
 			},
 		},
 		{
+			"Token",
 			AuthOptions{
 				TokenCredentials: &TokenCredentials{
 					ID: "1234567",
 				},
 			},
-			map[string]interface{}{
-				"auth": map[string]interface{}{
-					"token": map[string]interface{}{
+			map[string]any{
+				"auth": map[string]any{
+					"token": map[string]any{
 						"id": "1234567",
 					},
 				},
@@ -201,16 +205,20 @@ func TestBuildRequestBody(t *testing.T) {
 	}
 
 	for _, successCase := range successCases {
-		actual, err := gophercloud.BuildRequestBody(successCase.opts, "auth")
-		th.AssertNoErr(t, err)
-		th.AssertDeepEquals(t, successCase.expected, actual)
+		t.Run(successCase.name, func(t *testing.T) {
+			actual, err := gophercloud.BuildRequestBody(successCase.opts, "auth")
+			th.AssertNoErr(t, err)
+			th.AssertDeepEquals(t, successCase.expected, actual)
+		})
 	}
 
 	var failCases = []struct {
+		name     string
 		opts     AuthOptions
 		expected error
 	}{
 		{
+			"Conflicting tenant name and ID",
 			AuthOptions{
 				TenantID:   "987654321",
 				TenantName: "me",
@@ -218,6 +226,7 @@ func TestBuildRequestBody(t *testing.T) {
 			gophercloud.ErrMissingInput{},
 		},
 		{
+			"Conflicting password and token auth",
 			AuthOptions{
 				TokenCredentials: &TokenCredentials{
 					ID: "1234567",
@@ -230,6 +239,7 @@ func TestBuildRequestBody(t *testing.T) {
 			gophercloud.ErrMissingInput{},
 		},
 		{
+			"Missing Username or UserID",
 			AuthOptions{
 				PasswordCredentials: &PasswordCredentials{
 					Password: "swordfish",
@@ -238,6 +248,7 @@ func TestBuildRequestBody(t *testing.T) {
 			gophercloud.ErrMissingInput{},
 		},
 		{
+			"Missing filler fields",
 			AuthOptions{
 				PasswordCredentials: &PasswordCredentials{
 					Username: "me",
@@ -252,8 +263,10 @@ func TestBuildRequestBody(t *testing.T) {
 	}
 
 	for _, failCase := range failCases {
-		_, err := gophercloud.BuildRequestBody(failCase.opts, "auth")
-		th.AssertDeepEquals(t, reflect.TypeOf(failCase.expected), reflect.TypeOf(err))
+		t.Run(failCase.name, func(t *testing.T) {
+			_, err := gophercloud.BuildRequestBody(failCase.opts, "auth")
+			th.AssertTypeEquals(t, failCase.expected, err)
+		})
 	}
 
 	createdAt := time.Date(2018, 1, 4, 10, 00, 12, 0, time.UTC)
@@ -265,7 +278,7 @@ func TestBuildRequestBody(t *testing.T) {
 		CreatedAt: &createdAt,
 	}
 
-	expectedComplexFields := map[string]interface{}{
+	expectedComplexFields := map[string]any{
 		"username": "jdoe",
 	}
 

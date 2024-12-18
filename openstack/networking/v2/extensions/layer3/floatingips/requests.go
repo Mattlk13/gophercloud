@@ -1,8 +1,10 @@
 package floatingips
 
 import (
-	"github.com/gophercloud/gophercloud"
-	"github.com/gophercloud/gophercloud/pagination"
+	"context"
+
+	"github.com/gophercloud/gophercloud/v2"
+	"github.com/gophercloud/gophercloud/v2/pagination"
 )
 
 // ListOptsBuilder allows extensions to add additional parameters to the
@@ -63,7 +65,7 @@ func List(c *gophercloud.ServiceClient, opts ListOptsBuilder) pagination.Pager {
 // CreateOptsBuilder allows extensions to add additional parameters to the
 // Create request.
 type CreateOptsBuilder interface {
-	ToFloatingIPCreateMap() (map[string]interface{}, error)
+	ToFloatingIPCreateMap() (map[string]any, error)
 }
 
 // CreateOpts contains all the values needed to create a new floating IP
@@ -82,7 +84,7 @@ type CreateOpts struct {
 
 // ToFloatingIPCreateMap allows CreateOpts to satisfy the CreateOptsBuilder
 // interface
-func (opts CreateOpts) ToFloatingIPCreateMap() (map[string]interface{}, error) {
+func (opts CreateOpts) ToFloatingIPCreateMap() (map[string]any, error) {
 	return gophercloud.BuildRequestBody(opts, "floatingip")
 }
 
@@ -110,26 +112,28 @@ func (opts CreateOpts) ToFloatingIPCreateMap() (map[string]interface{}, error) {
 // operation will fail and return a 400 error code. If the PortID and FixedIP
 // are already associated with another resource, the operation will fail and
 // returns a 409 error code.
-func Create(c *gophercloud.ServiceClient, opts CreateOptsBuilder) (r CreateResult) {
+func Create(ctx context.Context, c *gophercloud.ServiceClient, opts CreateOptsBuilder) (r CreateResult) {
 	b, err := opts.ToFloatingIPCreateMap()
 	if err != nil {
 		r.Err = err
 		return
 	}
-	_, r.Err = c.Post(rootURL(c), b, &r.Body, nil)
+	resp, err := c.Post(ctx, rootURL(c), b, &r.Body, nil)
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
 	return
 }
 
 // Get retrieves a particular floating IP resource based on its unique ID.
-func Get(c *gophercloud.ServiceClient, id string) (r GetResult) {
-	_, r.Err = c.Get(resourceURL(c, id), &r.Body, nil)
+func Get(ctx context.Context, c *gophercloud.ServiceClient, id string) (r GetResult) {
+	resp, err := c.Get(ctx, resourceURL(c, id), &r.Body, nil)
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
 	return
 }
 
 // UpdateOptsBuilder allows extensions to add additional parameters to the
 // Update request.
 type UpdateOptsBuilder interface {
-	ToFloatingIPUpdateMap() (map[string]interface{}, error)
+	ToFloatingIPUpdateMap() (map[string]any, error)
 }
 
 // UpdateOpts contains the values used when updating a floating IP resource. The
@@ -144,13 +148,13 @@ type UpdateOpts struct {
 
 // ToFloatingIPUpdateMap allows UpdateOpts to satisfy the UpdateOptsBuilder
 // interface
-func (opts UpdateOpts) ToFloatingIPUpdateMap() (map[string]interface{}, error) {
+func (opts UpdateOpts) ToFloatingIPUpdateMap() (map[string]any, error) {
 	b, err := gophercloud.BuildRequestBody(opts, "floatingip")
 	if err != nil {
 		return nil, err
 	}
 
-	if m := b["floatingip"].(map[string]interface{}); m["port_id"] == "" {
+	if m := b["floatingip"].(map[string]any); m["port_id"] == "" {
 		m["port_id"] = nil
 	}
 
@@ -161,22 +165,24 @@ func (opts UpdateOpts) ToFloatingIPUpdateMap() (map[string]interface{}, error) {
 // "update" a floating IP is to associate it with a new internal port, or
 // disassociated it from all ports. See UpdateOpts for instructions of how to
 // do this.
-func Update(c *gophercloud.ServiceClient, id string, opts UpdateOptsBuilder) (r UpdateResult) {
+func Update(ctx context.Context, c *gophercloud.ServiceClient, id string, opts UpdateOptsBuilder) (r UpdateResult) {
 	b, err := opts.ToFloatingIPUpdateMap()
 	if err != nil {
 		r.Err = err
 		return
 	}
-	_, r.Err = c.Put(resourceURL(c, id), b, &r.Body, &gophercloud.RequestOpts{
+	resp, err := c.Put(ctx, resourceURL(c, id), b, &r.Body, &gophercloud.RequestOpts{
 		OkCodes: []int{200},
 	})
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
 	return
 }
 
 // Delete will permanently delete a particular floating IP resource. Please
 // ensure this is what you want - you can also disassociate the IP from existing
 // internal ports.
-func Delete(c *gophercloud.ServiceClient, id string) (r DeleteResult) {
-	_, r.Err = c.Delete(resourceURL(c, id), nil)
+func Delete(ctx context.Context, c *gophercloud.ServiceClient, id string) (r DeleteResult) {
+	resp, err := c.Delete(ctx, resourceURL(c, id), nil)
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
 	return
 }

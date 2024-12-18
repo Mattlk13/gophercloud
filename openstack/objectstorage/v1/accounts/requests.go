@@ -1,6 +1,10 @@
 package accounts
 
-import "github.com/gophercloud/gophercloud"
+import (
+	"context"
+
+	"github.com/gophercloud/gophercloud/v2"
+)
 
 // GetOptsBuilder allows extensions to add additional headers to the Get
 // request.
@@ -23,7 +27,7 @@ func (opts GetOpts) ToAccountGetMap() (map[string]string, error) {
 // custom metadata, call the ExtractMetadata method on the GetResult. To extract
 // all the headers that are returned (including the metadata), call the
 // Extract method on the GetResult.
-func Get(c *gophercloud.ServiceClient, opts GetOptsBuilder) (r GetResult) {
+func Get(ctx context.Context, c *gophercloud.ServiceClient, opts GetOptsBuilder) (r GetResult) {
 	h := make(map[string]string)
 	if opts != nil {
 		headers, err := opts.ToAccountGetMap()
@@ -35,14 +39,11 @@ func Get(c *gophercloud.ServiceClient, opts GetOptsBuilder) (r GetResult) {
 			h[k] = v
 		}
 	}
-	resp, err := c.Head(getURL(c), &gophercloud.RequestOpts{
+	resp, err := c.Head(ctx, getURL(c), &gophercloud.RequestOpts{
 		MoreHeaders: h,
 		OkCodes:     []int{204},
 	})
-	if resp != nil {
-		r.Header = resp.Header
-	}
-	r.Err = err
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
 	return
 }
 
@@ -56,10 +57,11 @@ type UpdateOptsBuilder interface {
 // deleting an account's metadata.
 type UpdateOpts struct {
 	Metadata          map[string]string
-	ContentType       string `h:"Content-Type"`
-	DetectContentType bool   `h:"X-Detect-Content-Type"`
-	TempURLKey        string `h:"X-Account-Meta-Temp-URL-Key"`
-	TempURLKey2       string `h:"X-Account-Meta-Temp-URL-Key-2"`
+	RemoveMetadata    []string
+	ContentType       *string `h:"Content-Type"`
+	DetectContentType *bool   `h:"X-Detect-Content-Type"`
+	TempURLKey        string  `h:"X-Account-Meta-Temp-URL-Key"`
+	TempURLKey2       string  `h:"X-Account-Meta-Temp-URL-Key-2"`
 }
 
 // ToAccountUpdateMap formats an UpdateOpts into a map[string]string of headers.
@@ -68,15 +70,21 @@ func (opts UpdateOpts) ToAccountUpdateMap() (map[string]string, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	for k, v := range opts.Metadata {
 		headers["X-Account-Meta-"+k] = v
 	}
+
+	for _, k := range opts.RemoveMetadata {
+		headers["X-Remove-Account-Meta-"+k] = "remove"
+	}
+
 	return headers, err
 }
 
 // Update is a function that creates, updates, or deletes an account's metadata.
 // To extract the headers returned, call the Extract method on the UpdateResult.
-func Update(c *gophercloud.ServiceClient, opts UpdateOptsBuilder) (r UpdateResult) {
+func Update(ctx context.Context, c *gophercloud.ServiceClient, opts UpdateOptsBuilder) (r UpdateResult) {
 	h := make(map[string]string)
 	if opts != nil {
 		headers, err := opts.ToAccountUpdateMap()
@@ -88,13 +96,10 @@ func Update(c *gophercloud.ServiceClient, opts UpdateOptsBuilder) (r UpdateResul
 			h[k] = v
 		}
 	}
-	resp, err := c.Request("POST", updateURL(c), &gophercloud.RequestOpts{
+	resp, err := c.Request(ctx, "POST", updateURL(c), &gophercloud.RequestOpts{
 		MoreHeaders: h,
 		OkCodes:     []int{201, 202, 204},
 	})
-	if resp != nil {
-		r.Header = resp.Header
-	}
-	r.Err = err
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
 	return
 }

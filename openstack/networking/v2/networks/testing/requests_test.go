@@ -1,16 +1,17 @@
 package testing
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"testing"
 	"time"
 
-	fake "github.com/gophercloud/gophercloud/openstack/networking/v2/common"
-	"github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/portsecurity"
-	"github.com/gophercloud/gophercloud/openstack/networking/v2/networks"
-	"github.com/gophercloud/gophercloud/pagination"
-	th "github.com/gophercloud/gophercloud/testhelper"
+	fake "github.com/gophercloud/gophercloud/v2/openstack/networking/v2/common"
+	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/extensions/portsecurity"
+	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/networks"
+	"github.com/gophercloud/gophercloud/v2/pagination"
+	th "github.com/gophercloud/gophercloud/v2/testhelper"
 )
 
 func TestList(t *testing.T) {
@@ -24,13 +25,13 @@ func TestList(t *testing.T) {
 		w.Header().Add("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 
-		fmt.Fprintf(w, ListResponse)
+		fmt.Fprint(w, ListResponse)
 	})
 
 	client := fake.ServiceClient()
 	count := 0
 
-	err := networks.List(client, networks.ListOpts{}).EachPage(func(page pagination.Page) (bool, error) {
+	err := networks.List(client, networks.ListOpts{}).EachPage(context.TODO(), func(_ context.Context, page pagination.Page) (bool, error) {
 		count++
 		actual, err := networks.ExtractNetworks(page)
 		if err != nil {
@@ -61,7 +62,7 @@ func TestListWithExtensions(t *testing.T) {
 		w.Header().Add("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 
-		fmt.Fprintf(w, ListResponse)
+		fmt.Fprint(w, ListResponse)
 	})
 
 	client := fake.ServiceClient()
@@ -73,7 +74,7 @@ func TestListWithExtensions(t *testing.T) {
 
 	var allNetworks []networkWithExt
 
-	allPages, err := networks.List(client, networks.ListOpts{}).AllPages()
+	allPages, err := networks.List(client, networks.ListOpts{}).AllPages(context.TODO())
 	th.AssertNoErr(t, err)
 
 	err = networks.ExtractNetworksInto(allPages, &allNetworks)
@@ -100,10 +101,10 @@ func TestGet(t *testing.T) {
 		w.Header().Add("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 
-		fmt.Fprintf(w, GetResponse)
+		fmt.Fprint(w, GetResponse)
 	})
 
-	n, err := networks.Get(fake.ServiceClient(), "d32019d3-bc6e-4319-9c1d-6722fc136a22").Extract()
+	n, err := networks.Get(context.TODO(), fake.ServiceClient(), "d32019d3-bc6e-4319-9c1d-6722fc136a22").Extract()
 	th.AssertNoErr(t, err)
 	th.CheckDeepEquals(t, &Network1, n)
 	th.AssertEquals(t, n.CreatedAt.Format(time.RFC3339), "2019-06-30T04:15:37Z")
@@ -121,7 +122,7 @@ func TestGetWithExtensions(t *testing.T) {
 		w.Header().Add("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 
-		fmt.Fprintf(w, GetResponse)
+		fmt.Fprint(w, GetResponse)
 	})
 
 	var networkWithExtensions struct {
@@ -129,7 +130,7 @@ func TestGetWithExtensions(t *testing.T) {
 		portsecurity.PortSecurityExt
 	}
 
-	err := networks.Get(fake.ServiceClient(), "d32019d3-bc6e-4319-9c1d-6722fc136a22").ExtractInto(&networkWithExtensions)
+	err := networks.Get(context.TODO(), fake.ServiceClient(), "d32019d3-bc6e-4319-9c1d-6722fc136a22").ExtractInto(&networkWithExtensions)
 	th.AssertNoErr(t, err)
 
 	th.AssertEquals(t, networkWithExtensions.Status, "ACTIVE")
@@ -149,12 +150,12 @@ func TestCreate(t *testing.T) {
 		w.Header().Add("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
 
-		fmt.Fprintf(w, CreateResponse)
+		fmt.Fprint(w, CreateResponse)
 	})
 
 	iTrue := true
 	options := networks.CreateOpts{Name: "private", AdminStateUp: &iTrue}
-	n, err := networks.Create(fake.ServiceClient(), options).Extract()
+	n, err := networks.Create(context.TODO(), fake.ServiceClient(), options).Extract()
 	th.AssertNoErr(t, err)
 
 	th.AssertEquals(t, n.Status, "ACTIVE")
@@ -175,7 +176,7 @@ func TestCreateWithOptionalFields(t *testing.T) {
 		th.TestJSONRequest(t, r, CreateOptionalFieldsRequest)
 
 		w.WriteHeader(http.StatusCreated)
-		fmt.Fprintf(w, `{}`)
+		fmt.Fprint(w, `{}`)
 	})
 
 	iTrue := true
@@ -186,7 +187,7 @@ func TestCreateWithOptionalFields(t *testing.T) {
 		TenantID:              "12345",
 		AvailabilityZoneHints: []string{"zone1", "zone2"},
 	}
-	_, err := networks.Create(fake.ServiceClient(), options).Extract()
+	_, err := networks.Create(context.TODO(), fake.ServiceClient(), options).Extract()
 	th.AssertNoErr(t, err)
 }
 
@@ -204,13 +205,13 @@ func TestUpdate(t *testing.T) {
 		w.Header().Add("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 
-		fmt.Fprintf(w, UpdateResponse)
+		fmt.Fprint(w, UpdateResponse)
 	})
 
 	iTrue, iFalse := true, false
 	name := "new_network_name"
 	options := networks.UpdateOpts{Name: &name, AdminStateUp: &iFalse, Shared: &iTrue}
-	n, err := networks.Update(fake.ServiceClient(), "4e8e5957-649f-477b-9e5b-f1f75b21c03c", options).Extract()
+	n, err := networks.Update(context.TODO(), fake.ServiceClient(), "4e8e5957-649f-477b-9e5b-f1f75b21c03c", options).Extract()
 	th.AssertNoErr(t, err)
 
 	th.AssertEquals(t, n.Name, "new_network_name")
@@ -219,6 +220,50 @@ func TestUpdate(t *testing.T) {
 	th.AssertEquals(t, n.ID, "4e8e5957-649f-477b-9e5b-f1f75b21c03c")
 	th.AssertEquals(t, n.CreatedAt.Format(time.RFC3339), "2019-06-30T04:15:37Z")
 	th.AssertEquals(t, n.UpdatedAt.Format(time.RFC3339), "2019-06-30T05:18:49Z")
+}
+
+func TestUpdateRevision(t *testing.T) {
+	th.SetupHTTP()
+	defer th.TeardownHTTP()
+
+	th.Mux.HandleFunc("/v2.0/networks/4e8e5957-649f-477b-9e5b-f1f75b21c03c", func(w http.ResponseWriter, r *http.Request) {
+		th.TestMethod(t, r, "PUT")
+		th.TestHeader(t, r, "X-Auth-Token", fake.TokenID)
+		th.TestHeader(t, r, "Content-Type", "application/json")
+		th.TestHeader(t, r, "Accept", "application/json")
+		th.TestHeaderUnset(t, r, "If-Match")
+		th.TestJSONRequest(t, r, UpdateRequest)
+
+		w.Header().Add("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+
+		fmt.Fprint(w, UpdateResponse)
+	})
+
+	th.Mux.HandleFunc("/v2.0/networks/4e8e5957-649f-477b-9e5b-f1f75b21c03d", func(w http.ResponseWriter, r *http.Request) {
+		th.TestMethod(t, r, "PUT")
+		th.TestHeader(t, r, "X-Auth-Token", fake.TokenID)
+		th.TestHeader(t, r, "Content-Type", "application/json")
+		th.TestHeader(t, r, "Accept", "application/json")
+		th.TestHeader(t, r, "If-Match", "revision_number=42")
+		th.TestJSONRequest(t, r, UpdateRequest)
+
+		w.Header().Add("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+
+		fmt.Fprint(w, UpdateResponse)
+	})
+
+	iTrue, iFalse := true, false
+	name := "new_network_name"
+	options := networks.UpdateOpts{Name: &name, AdminStateUp: &iFalse, Shared: &iTrue}
+	_, err := networks.Update(context.TODO(), fake.ServiceClient(), "4e8e5957-649f-477b-9e5b-f1f75b21c03c", options).Extract()
+	th.AssertNoErr(t, err)
+
+	revisionNumber := 42
+	options.RevisionNumber = &revisionNumber
+	_, err = networks.Update(context.TODO(), fake.ServiceClient(), "4e8e5957-649f-477b-9e5b-f1f75b21c03d", options).Extract()
+	th.AssertNoErr(t, err)
 }
 
 func TestDelete(t *testing.T) {
@@ -231,7 +276,7 @@ func TestDelete(t *testing.T) {
 		w.WriteHeader(http.StatusNoContent)
 	})
 
-	res := networks.Delete(fake.ServiceClient(), "4e8e5957-649f-477b-9e5b-f1f75b21c03c")
+	res := networks.Delete(context.TODO(), fake.ServiceClient(), "4e8e5957-649f-477b-9e5b-f1f75b21c03c")
 	th.AssertNoErr(t, res.Err)
 }
 
@@ -248,7 +293,7 @@ func TestCreatePortSecurity(t *testing.T) {
 		w.Header().Add("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
 
-		fmt.Fprintf(w, CreatePortSecurityResponse)
+		fmt.Fprint(w, CreatePortSecurityResponse)
 	})
 
 	var networkWithExtensions struct {
@@ -264,7 +309,7 @@ func TestCreatePortSecurity(t *testing.T) {
 		PortSecurityEnabled: &iFalse,
 	}
 
-	err := networks.Create(fake.ServiceClient(), createOpts).ExtractInto(&networkWithExtensions)
+	err := networks.Create(context.TODO(), fake.ServiceClient(), createOpts).ExtractInto(&networkWithExtensions)
 	th.AssertNoErr(t, err)
 
 	th.AssertEquals(t, networkWithExtensions.Status, "ACTIVE")
@@ -285,7 +330,7 @@ func TestUpdatePortSecurity(t *testing.T) {
 		w.Header().Add("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 
-		fmt.Fprintf(w, UpdatePortSecurityResponse)
+		fmt.Fprint(w, UpdatePortSecurityResponse)
 	})
 
 	var networkWithExtensions struct {
@@ -300,7 +345,7 @@ func TestUpdatePortSecurity(t *testing.T) {
 		PortSecurityEnabled: &iFalse,
 	}
 
-	err := networks.Update(fake.ServiceClient(), "4e8e5957-649f-477b-9e5b-f1f75b21c03c", updateOpts).ExtractInto(&networkWithExtensions)
+	err := networks.Update(context.TODO(), fake.ServiceClient(), "4e8e5957-649f-477b-9e5b-f1f75b21c03c", updateOpts).ExtractInto(&networkWithExtensions)
 	th.AssertNoErr(t, err)
 
 	th.AssertEquals(t, networkWithExtensions.Name, "private")

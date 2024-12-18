@@ -1,8 +1,10 @@
 package users
 
 import (
-	"github.com/gophercloud/gophercloud"
-	"github.com/gophercloud/gophercloud/pagination"
+	"context"
+
+	"github.com/gophercloud/gophercloud/v2"
+	"github.com/gophercloud/gophercloud/v2/pagination"
 )
 
 // List lists the existing users.
@@ -37,12 +39,12 @@ type CreateOpts CommonOpts
 // CreateOptsBuilder allows extensions to add additional parameters to the
 // Create request.
 type CreateOptsBuilder interface {
-	ToUserCreateMap() (map[string]interface{}, error)
+	ToUserCreateMap() (map[string]any, error)
 }
 
 // ToUserCreateMap assembles a request body based on the contents of a
 // CreateOpts.
-func (opts CreateOpts) ToUserCreateMap() (map[string]interface{}, error) {
+func (opts CreateOpts) ToUserCreateMap() (map[string]any, error) {
 	if opts.Name == "" && opts.Username == "" {
 		err := gophercloud.ErrMissingInput{}
 		err.Argument = "users.CreateOpts.Name/users.CreateOpts.Username"
@@ -53,28 +55,30 @@ func (opts CreateOpts) ToUserCreateMap() (map[string]interface{}, error) {
 }
 
 // Create is the operation responsible for creating new users.
-func Create(client *gophercloud.ServiceClient, opts CreateOptsBuilder) (r CreateResult) {
+func Create(ctx context.Context, client *gophercloud.ServiceClient, opts CreateOptsBuilder) (r CreateResult) {
 	b, err := opts.ToUserCreateMap()
 	if err != nil {
 		r.Err = err
 		return
 	}
-	_, r.Err = client.Post(rootURL(client), b, &r.Body, &gophercloud.RequestOpts{
+	resp, err := client.Post(ctx, rootURL(client), b, &r.Body, &gophercloud.RequestOpts{
 		OkCodes: []int{200, 201},
 	})
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
 	return
 }
 
 // Get requests details on a single user, either by ID or Name.
-func Get(client *gophercloud.ServiceClient, id string) (r GetResult) {
-	_, r.Err = client.Get(ResourceURL(client, id), &r.Body, nil)
+func Get(ctx context.Context, client *gophercloud.ServiceClient, id string) (r GetResult) {
+	resp, err := client.Get(ctx, ResourceURL(client, id), &r.Body, nil)
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
 	return
 }
 
 // UpdateOptsBuilder allows extensions to add additional parameters to the
 // Update request.
 type UpdateOptsBuilder interface {
-	ToUserUpdateMap() (map[string]interface{}, error)
+	ToUserUpdateMap() (map[string]any, error)
 }
 
 // UpdateOpts specifies the base attributes that may be updated on an
@@ -82,26 +86,28 @@ type UpdateOptsBuilder interface {
 type UpdateOpts CommonOpts
 
 // ToUserUpdateMap formats an UpdateOpts structure into a request body.
-func (opts UpdateOpts) ToUserUpdateMap() (map[string]interface{}, error) {
+func (opts UpdateOpts) ToUserUpdateMap() (map[string]any, error) {
 	return gophercloud.BuildRequestBody(opts, "user")
 }
 
 // Update is the operation responsible for updating exist users by their ID.
-func Update(client *gophercloud.ServiceClient, id string, opts UpdateOptsBuilder) (r UpdateResult) {
+func Update(ctx context.Context, client *gophercloud.ServiceClient, id string, opts UpdateOptsBuilder) (r UpdateResult) {
 	b, err := opts.ToUserUpdateMap()
 	if err != nil {
 		r.Err = err
 		return
 	}
-	_, r.Err = client.Put(ResourceURL(client, id), &b, &r.Body, &gophercloud.RequestOpts{
+	resp, err := client.Put(ctx, ResourceURL(client, id), &b, &r.Body, &gophercloud.RequestOpts{
 		OkCodes: []int{200},
 	})
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
 	return
 }
 
 // Delete is the operation responsible for permanently deleting a User.
-func Delete(client *gophercloud.ServiceClient, id string) (r DeleteResult) {
-	_, r.Err = client.Delete(ResourceURL(client, id), nil)
+func Delete(ctx context.Context, client *gophercloud.ServiceClient, id string) (r DeleteResult) {
+	resp, err := client.Delete(ctx, ResourceURL(client, id), nil)
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
 	return
 }
 

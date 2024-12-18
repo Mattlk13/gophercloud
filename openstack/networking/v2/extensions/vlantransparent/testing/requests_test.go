@@ -1,14 +1,15 @@
 package testing
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"testing"
 
-	fake "github.com/gophercloud/gophercloud/openstack/networking/v2/common"
-	"github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/vlantransparent"
-	"github.com/gophercloud/gophercloud/openstack/networking/v2/networks"
-	th "github.com/gophercloud/gophercloud/testhelper"
+	fake "github.com/gophercloud/gophercloud/v2/openstack/networking/v2/common"
+	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/extensions/vlantransparent"
+	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/networks"
+	th "github.com/gophercloud/gophercloud/v2/testhelper"
 )
 
 func TestList(t *testing.T) {
@@ -22,7 +23,7 @@ func TestList(t *testing.T) {
 		w.Header().Add("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 
-		fmt.Fprintf(w, NetworksVLANTransparentListResult)
+		fmt.Fprint(w, NetworksVLANTransparentListResult)
 	})
 
 	type networkVLANTransparentExt struct {
@@ -31,7 +32,7 @@ func TestList(t *testing.T) {
 	}
 	var actual []networkVLANTransparentExt
 
-	allPages, err := networks.List(fake.ServiceClient(), networks.ListOpts{}).AllPages()
+	allPages, err := networks.List(fake.ServiceClient(), networks.ListOpts{}).AllPages(context.TODO())
 	th.AssertNoErr(t, err)
 
 	err = networks.ExtractNetworksInto(allPages, &actual)
@@ -58,7 +59,7 @@ func TestGet(t *testing.T) {
 		w.Header().Add("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 
-		fmt.Fprintf(w, NetworksVLANTransparentGetResult)
+		fmt.Fprint(w, NetworksVLANTransparentGetResult)
 	})
 
 	var s struct {
@@ -66,7 +67,7 @@ func TestGet(t *testing.T) {
 		vlantransparent.TransparentExt
 	}
 
-	err := networks.Get(fake.ServiceClient(), "db193ab3-96e3-4cb3-8fc5-05f4296d0324").ExtractInto(&s)
+	err := networks.Get(context.TODO(), fake.ServiceClient(), "db193ab3-96e3-4cb3-8fc5-05f4296d0324").ExtractInto(&s)
 	th.AssertNoErr(t, err)
 
 	th.AssertEquals(t, "db193ab3-96e3-4cb3-8fc5-05f4296d0324", s.ID)
@@ -93,7 +94,7 @@ func TestCreate(t *testing.T) {
 		w.Header().Add("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
 
-		fmt.Fprintf(w, NetworksVLANTransparentCreateResult)
+		fmt.Fprint(w, NetworksVLANTransparentCreateResult)
 	})
 
 	iTrue := true
@@ -111,7 +112,7 @@ func TestCreate(t *testing.T) {
 		vlantransparent.TransparentExt
 	}
 
-	err := networks.Create(fake.ServiceClient(), vlanTransparentCreateOpts).ExtractInto(&s)
+	err := networks.Create(context.TODO(), fake.ServiceClient(), vlanTransparentCreateOpts).ExtractInto(&s)
 	th.AssertNoErr(t, err)
 
 	th.AssertEquals(t, "db193ab3-96e3-4cb3-8fc5-05f4296d0324", s.ID)
@@ -138,7 +139,7 @@ func TestUpdate(t *testing.T) {
 		w.Header().Add("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 
-		fmt.Fprintf(w, NetworksVLANTransparentUpdateResult)
+		fmt.Fprint(w, NetworksVLANTransparentUpdateResult)
 	})
 
 	iFalse := false
@@ -158,7 +159,7 @@ func TestUpdate(t *testing.T) {
 		vlantransparent.TransparentExt
 	}
 
-	err := networks.Update(fake.ServiceClient(), "4e8e5957-649f-477b-9e5b-f1f75b21c03c", vlanTransparentUpdateOpts).ExtractInto(&s)
+	err := networks.Update(context.TODO(), fake.ServiceClient(), "4e8e5957-649f-477b-9e5b-f1f75b21c03c", vlanTransparentUpdateOpts).ExtractInto(&s)
 	th.AssertNoErr(t, err)
 
 	th.AssertEquals(t, "db193ab3-96e3-4cb3-8fc5-05f4296d0324", s.ID)

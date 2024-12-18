@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/gophercloud/gophercloud"
-	"github.com/gophercloud/gophercloud/pagination"
+	"github.com/gophercloud/gophercloud/v2"
+	"github.com/gophercloud/gophercloud/v2/pagination"
 )
 
 // Snapshot contains all the information associated with a Cinder Snapshot.
@@ -53,6 +53,11 @@ type DeleteResult struct {
 	gophercloud.ErrResult
 }
 
+// UpdateResult contains the response body and error from an Update request.
+type UpdateResult struct {
+	commonResult
+}
+
 // SnapshotPage is a pagination.Pager that is returned from a call to the List function.
 type SnapshotPage struct {
 	pagination.LinkedPageBase
@@ -80,15 +85,21 @@ func (r *Snapshot) UnmarshalJSON(b []byte) error {
 
 // IsEmpty returns true if a SnapshotPage contains no Snapshots.
 func (r SnapshotPage) IsEmpty() (bool, error) {
+	if r.StatusCode == 204 {
+		return true, nil
+	}
+
 	volumes, err := ExtractSnapshots(r)
 	return len(volumes) == 0, err
 }
 
-func (page SnapshotPage) NextPageURL() (string, error) {
+// NextPageURL uses the response's embedded link reference to navigate to the
+// next page of results.
+func (r SnapshotPage) NextPageURL() (string, error) {
 	var s struct {
 		Links []gophercloud.Link `json:"snapshots_links"`
 	}
-	err := page.ExtractInto(&s)
+	err := r.ExtractInto(&s)
 	if err != nil {
 		return "", err
 	}
@@ -110,12 +121,12 @@ type UpdateMetadataResult struct {
 }
 
 // ExtractMetadata returns the metadata from a response from snapshots.UpdateMetadata.
-func (r UpdateMetadataResult) ExtractMetadata() (map[string]interface{}, error) {
+func (r UpdateMetadataResult) ExtractMetadata() (map[string]any, error) {
 	if r.Err != nil {
 		return nil, r.Err
 	}
-	m := r.Body.(map[string]interface{})["metadata"]
-	return m.(map[string]interface{}), nil
+	m := r.Body.(map[string]any)["metadata"]
+	return m.(map[string]any), nil
 }
 
 type commonResult struct {
@@ -129,4 +140,19 @@ func (r commonResult) Extract() (*Snapshot, error) {
 	}
 	err := r.ExtractInto(&s)
 	return s.Snapshot, err
+}
+
+// ResetStatusResult contains the response error from a ResetStatus request.
+type ResetStatusResult struct {
+	gophercloud.ErrResult
+}
+
+// UpdateStatusResult contains the response error from an UpdateStatus request.
+type UpdateStatusResult struct {
+	gophercloud.ErrResult
+}
+
+// ForceDeleteResult contains the response error from a ForceDelete request.
+type ForceDeleteResult struct {
+	gophercloud.ErrResult
 }

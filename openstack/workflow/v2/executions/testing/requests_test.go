@@ -1,6 +1,7 @@
 package testing
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -8,10 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gophercloud/gophercloud/openstack/workflow/v2/executions"
-	"github.com/gophercloud/gophercloud/pagination"
-	th "github.com/gophercloud/gophercloud/testhelper"
-	fake "github.com/gophercloud/gophercloud/testhelper/client"
+	"github.com/gophercloud/gophercloud/v2/openstack/workflow/v2/executions"
+	"github.com/gophercloud/gophercloud/v2/pagination"
+	th "github.com/gophercloud/gophercloud/v2/testhelper"
+	fake "github.com/gophercloud/gophercloud/v2/testhelper/client"
 )
 
 func TestCreateExecution(t *testing.T) {
@@ -24,7 +25,7 @@ func TestCreateExecution(t *testing.T) {
 		w.WriteHeader(http.StatusCreated)
 
 		w.Header().Add("Content-Type", "application/json")
-		fmt.Fprintf(w, `
+		fmt.Fprint(w, `
 			{
 				"created_at": "2018-09-12 14:48:49",
 				"description": "description",
@@ -47,13 +48,13 @@ func TestCreateExecution(t *testing.T) {
 
 	opts := &executions.CreateOpts{
 		WorkflowID: "6656c143-a009-4bcb-9814-cc100a20bbfa",
-		Input: map[string]interface{}{
+		Input: map[string]any{
 			"msg": "Hello",
 		},
 		Description: "description",
 	}
 
-	actual, err := executions.Create(fake.ServiceClient(), opts).Extract()
+	actual, err := executions.Create(context.TODO(), fake.ServiceClient(), opts).Extract()
 	if err != nil {
 		t.Fatalf("Unable to create execution: %v", err)
 	}
@@ -61,14 +62,14 @@ func TestCreateExecution(t *testing.T) {
 	expected := &executions.Execution{
 		ID:          "50bb59f1-eb77-4017-a77f-6d575b002667",
 		Description: "description",
-		Input: map[string]interface{}{
+		Input: map[string]any{
 			"msg": "Hello",
 		},
-		Params: map[string]interface{}{
+		Params: map[string]any{
 			"namespace": "",
-			"env":       map[string]interface{}{},
+			"env":       map[string]any{},
 		},
-		Output:       map[string]interface{}{},
+		Output:       map[string]any{},
 		ProjectID:    "778c0f25df0d492a9a868ee9e2fbb513",
 		State:        "SUCCESS",
 		WorkflowID:   "6656c143-a009-4bcb-9814-cc100a20bbfa",
@@ -91,7 +92,7 @@ func TestGetExecution(t *testing.T) {
 		th.TestHeader(t, r, "X-Auth-token", fake.TokenID)
 
 		w.Header().Add("Content-Type", "application/json")
-		fmt.Fprintf(w, `
+		fmt.Fprint(w, `
 			{
 				"created_at": "2018-09-12 14:48:49",
 				"description": "description",
@@ -112,7 +113,7 @@ func TestGetExecution(t *testing.T) {
 		`)
 	})
 
-	actual, err := executions.Get(fake.ServiceClient(), "50bb59f1-eb77-4017-a77f-6d575b002667").Extract()
+	actual, err := executions.Get(context.TODO(), fake.ServiceClient(), "50bb59f1-eb77-4017-a77f-6d575b002667").Extract()
 	if err != nil {
 		t.Fatalf("Unable to get execution: %v", err)
 	}
@@ -120,14 +121,14 @@ func TestGetExecution(t *testing.T) {
 	expected := &executions.Execution{
 		ID:          "50bb59f1-eb77-4017-a77f-6d575b002667",
 		Description: "description",
-		Input: map[string]interface{}{
+		Input: map[string]any{
 			"msg": "Hello",
 		},
-		Params: map[string]interface{}{
+		Params: map[string]any{
 			"namespace": "",
-			"env":       map[string]interface{}{},
+			"env":       map[string]any{},
 		},
-		Output:       map[string]interface{}{},
+		Output:       map[string]any{},
 		ProjectID:    "778c0f25df0d492a9a868ee9e2fbb513",
 		State:        "SUCCESS",
 		WorkflowID:   "6656c143-a009-4bcb-9814-cc100a20bbfa",
@@ -149,7 +150,7 @@ func TestDeleteExecution(t *testing.T) {
 		th.TestHeader(t, r, "X-Auth-Token", fake.TokenID)
 		w.WriteHeader(http.StatusAccepted)
 	})
-	res := executions.Delete(fake.ServiceClient(), "1")
+	res := executions.Delete(context.TODO(), fake.ServiceClient(), "1")
 	th.AssertNoErr(t, res.Err)
 }
 
@@ -160,7 +161,9 @@ func TestListExecutions(t *testing.T) {
 		th.TestMethod(t, r, "GET")
 		th.TestHeader(t, r, "X-Auth-Token", fake.TokenID)
 		w.Header().Add("Content-Type", "application/json")
-		r.ParseForm()
+		if err := r.ParseForm(); err != nil {
+			t.Errorf("Failed to parse request form %v", err)
+		}
 		marker := r.Form.Get("marker")
 		switch marker {
 		case "":
@@ -186,14 +189,14 @@ func TestListExecutions(t *testing.T) {
 				"next": "%s/executions?marker=50bb59f1-eb77-4017-a77f-6d575b002667"
 			}`, th.Server.URL)
 		case "50bb59f1-eb77-4017-a77f-6d575b002667":
-			fmt.Fprintf(w, `{ "executions": [] }`)
+			fmt.Fprint(w, `{ "executions": [] }`)
 		default:
 			t.Fatalf("Unexpected marker: [%s]", marker)
 		}
 	})
 	pages := 0
 	// Get all executions
-	err := executions.List(fake.ServiceClient(), nil).EachPage(func(page pagination.Page) (bool, error) {
+	err := executions.List(fake.ServiceClient(), nil).EachPage(context.TODO(), func(_ context.Context, page pagination.Page) (bool, error) {
 		pages++
 		actual, err := executions.ExtractExecutions(page)
 		if err != nil {
@@ -201,15 +204,15 @@ func TestListExecutions(t *testing.T) {
 		}
 
 		expected := []executions.Execution{
-			executions.Execution{
+			{
 				ID:          "50bb59f1-eb77-4017-a77f-6d575b002667",
 				Description: "description",
-				Input: map[string]interface{}{
+				Input: map[string]any{
 					"msg": "Hello",
 				},
-				Params: map[string]interface{}{
+				Params: map[string]any{
 					"namespace": "",
-					"env":       map[string]interface{}{},
+					"env":       map[string]any{},
 				},
 				ProjectID:    "778c0f25df0d492a9a868ee9e2fbb513",
 				State:        "SUCCESS",
@@ -235,18 +238,18 @@ func TestListExecutions(t *testing.T) {
 
 func TestToExecutionListQuery(t *testing.T) {
 	for expected, opts := range map[string]*executions.ListOpts{
-		newValue("input", `{"msg":"Hello"}`): &executions.ListOpts{
-			Input: map[string]interface{}{
+		newValue("input", `{"msg":"Hello"}`): {
+			Input: map[string]any{
 				"msg": "Hello",
 			},
 		},
-		newValue("description", `neq:not_description`): &executions.ListOpts{
+		newValue("description", `neq:not_description`): {
 			Description: &executions.ListFilter{
 				Filter: executions.FilterNEQ,
 				Value:  "not_description",
 			},
 		},
-		newValue("created_at", `gt:2018-01-01 00:00:00`): &executions.ListOpts{
+		newValue("created_at", `gt:2018-01-01 00:00:00`): {
 			CreatedAt: &executions.ListDateFilter{
 				Filter: executions.FilterGT,
 				Value:  time.Date(2018, time.January, 1, 0, 0, 0, 0, time.UTC),

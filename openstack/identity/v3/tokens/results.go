@@ -3,7 +3,7 @@ package tokens
 import (
 	"time"
 
-	"github.com/gophercloud/gophercloud"
+	"github.com/gophercloud/gophercloud/v2"
 )
 
 // Endpoint represents a single API endpoint offered by a service.
@@ -76,6 +76,18 @@ type Project struct {
 	Name   string `json:"name"`
 }
 
+type TrustUser struct {
+	ID string `json:"id"`
+}
+
+// Trust provides information about trust with which User is authorized.
+type Trust struct {
+	ID            string    `json:"id"`
+	Impersonation bool      `json:"impersonation"`
+	TrusteeUserID TrustUser `json:"trustee_user"`
+	TrustorUserID TrustUser `json:"trustor_user"`
+}
+
 // commonResult is the response from a request. A commonResult has various
 // methods which can be used to extract different details about the result.
 type commonResult struct {
@@ -106,6 +118,13 @@ func (r commonResult) ExtractToken() (*Token, error) {
 // string is the same as the ID field of the Token struct returned from
 // ExtractToken().
 func (r CreateResult) ExtractTokenID() (string, error) {
+	return r.Header.Get("X-Subject-Token"), r.Err
+}
+
+// ExtractTokenID implements the gophercloud.AuthResult interface. The returned
+// string is the same as the ID field of the Token struct returned from
+// ExtractToken().
+func (r GetResult) ExtractTokenID() (string, error) {
 	return r.Header.Get("X-Subject-Token"), r.Err
 }
 
@@ -144,6 +163,24 @@ func (r commonResult) ExtractProject() (*Project, error) {
 	return s.Project, err
 }
 
+// ExtractDomain returns Domain to which User is authorized.
+func (r commonResult) ExtractDomain() (*Domain, error) {
+	var s struct {
+		Domain *Domain `json:"domain"`
+	}
+	err := r.ExtractInto(&s)
+	return s.Domain, err
+}
+
+// ExtractTrust returns Trust to which User is authorized.
+func (r commonResult) ExtractTrust() (*Trust, error) {
+	var s struct {
+		Trust *Trust `json:"OS-TRUST:trust"`
+	}
+	err := r.ExtractInto(&s)
+	return s.Trust, err
+}
+
 // CreateResult is the response from a Create request. Use ExtractToken()
 // to interpret it as a Token, or ExtractServiceCatalog() to interpret it
 // as a service catalog.
@@ -173,6 +210,6 @@ type Token struct {
 	ExpiresAt time.Time `json:"expires_at"`
 }
 
-func (r commonResult) ExtractInto(v interface{}) error {
+func (r commonResult) ExtractInto(v any) error {
 	return r.ExtractIntoStructPtr(v, "token")
 }

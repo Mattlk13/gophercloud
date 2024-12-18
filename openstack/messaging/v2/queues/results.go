@@ -3,9 +3,8 @@ package queues
 import (
 	"encoding/json"
 
-	"github.com/gophercloud/gophercloud"
-	"github.com/gophercloud/gophercloud/internal"
-	"github.com/gophercloud/gophercloud/pagination"
+	"github.com/gophercloud/gophercloud/v2"
+	"github.com/gophercloud/gophercloud/v2/pagination"
 )
 
 // commonResult is the response of a base result.
@@ -80,13 +79,16 @@ type QueueDetails struct {
 	DefaultMessageTTL int `json:"_default_message_ttl"`
 
 	// Extra is a collection of miscellaneous key/values.
-	Extra map[string]interface{} `json:"-"`
+	Extra map[string]any `json:"-"`
 
 	// The max number the message can be claimed from the queue.
 	MaxClaimCount int `json:"_max_claim_count"`
 
 	// The max post size of messages defined for the queue.
 	MaxMessagesPostSize int `json:"_max_messages_post_size"`
+
+	// Is message encryption enabled
+	EnableEncryptMessages bool `json:"_enable_encrypt_messages"`
 
 	// The flavor defined for the queue.
 	Flavor string `json:"flavor"`
@@ -148,6 +150,10 @@ func ExtractQueues(r pagination.Page) ([]Queue, error) {
 
 // IsEmpty determines if a QueuesPage contains any results.
 func (r QueuePage) IsEmpty() (bool, error) {
+	if r.StatusCode == 204 {
+		return true, nil
+	}
+
 	s, err := ExtractQueues(r)
 	return len(s) == 0, err
 }
@@ -170,11 +176,23 @@ func (r QueuePage) NextPageURL() (string, error) {
 	return nextPageURL(r.URL.String(), next)
 }
 
+// GetCount value if it request was supplied `WithCount` param
+func (r QueuePage) GetCount() (int, error) {
+	var s struct {
+		Count int `json:"count"`
+	}
+	err := r.ExtractInto(&s)
+	if err != nil {
+		return 0, err
+	}
+	return s.Count, nil
+}
+
 func (r *QueueDetails) UnmarshalJSON(b []byte) error {
 	type tmp QueueDetails
 	var s struct {
 		tmp
-		Extra map[string]interface{} `json:"extra"`
+		Extra map[string]any `json:"extra"`
 	}
 	err := json.Unmarshal(b, &s)
 	if err != nil {
@@ -187,13 +205,13 @@ func (r *QueueDetails) UnmarshalJSON(b []byte) error {
 	if s.Extra != nil {
 		r.Extra = s.Extra
 	} else {
-		var result interface{}
+		var result any
 		err := json.Unmarshal(b, &result)
 		if err != nil {
 			return err
 		}
-		if resultMap, ok := result.(map[string]interface{}); ok {
-			r.Extra = internal.RemainingKeys(QueueDetails{}, resultMap)
+		if resultMap, ok := result.(map[string]any); ok {
+			r.Extra = gophercloud.RemainingKeys(QueueDetails{}, resultMap)
 		}
 	}
 

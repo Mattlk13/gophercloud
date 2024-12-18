@@ -1,14 +1,15 @@
 package testing
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"testing"
 
-	fake "github.com/gophercloud/gophercloud/openstack/networking/v2/common"
-	"github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/qos/rules"
-	"github.com/gophercloud/gophercloud/pagination"
-	th "github.com/gophercloud/gophercloud/testhelper"
+	fake "github.com/gophercloud/gophercloud/v2/openstack/networking/v2/common"
+	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/extensions/qos/rules"
+	"github.com/gophercloud/gophercloud/v2/pagination"
+	th "github.com/gophercloud/gophercloud/v2/testhelper"
 )
 
 func TestListBandwidthLimitRule(t *testing.T) {
@@ -22,7 +23,7 @@ func TestListBandwidthLimitRule(t *testing.T) {
 		w.Header().Add("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 
-		fmt.Fprintf(w, BandwidthLimitRulesListResult)
+		fmt.Fprint(w, BandwidthLimitRulesListResult)
 	})
 
 	count := 0
@@ -31,7 +32,7 @@ func TestListBandwidthLimitRule(t *testing.T) {
 		fake.ServiceClient(),
 		"501005fa-3b56-4061-aaca-3f24995112e1",
 		rules.BandwidthLimitRulesListOpts{},
-	).EachPage(func(page pagination.Page) (bool, error) {
+	).EachPage(context.TODO(), func(_ context.Context, page pagination.Page) (bool, error) {
 		count++
 		actual, err := rules.ExtractBandwidthLimitRules(page)
 		if err != nil {
@@ -70,10 +71,10 @@ func TestGetBandwidthLimitRule(t *testing.T) {
 		w.Header().Add("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 
-		fmt.Fprintf(w, BandwidthLimitRulesGetResult)
+		fmt.Fprint(w, BandwidthLimitRulesGetResult)
 	})
 
-	r, err := rules.GetBandwidthLimitRule(fake.ServiceClient(), "501005fa-3b56-4061-aaca-3f24995112e1", "30a57f4a-336b-4382-8275-d708babd2241").ExtractBandwidthLimitRule()
+	r, err := rules.GetBandwidthLimitRule(context.TODO(), fake.ServiceClient(), "501005fa-3b56-4061-aaca-3f24995112e1", "30a57f4a-336b-4382-8275-d708babd2241").ExtractBandwidthLimitRule()
 	th.AssertNoErr(t, err)
 
 	th.AssertEquals(t, r.ID, "30a57f4a-336b-4382-8275-d708babd2241")
@@ -96,14 +97,14 @@ func TestCreateBandwidthLimitRule(t *testing.T) {
 		w.Header().Add("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
 
-		fmt.Fprintf(w, BandwidthLimitRulesCreateResult)
+		fmt.Fprint(w, BandwidthLimitRulesCreateResult)
 	})
 
 	opts := rules.CreateBandwidthLimitRuleOpts{
 		MaxKBps:      2000,
 		MaxBurstKBps: 200,
 	}
-	r, err := rules.CreateBandwidthLimitRule(fake.ServiceClient(), "501005fa-3b56-4061-aaca-3f24995112e1", opts).ExtractBandwidthLimitRule()
+	r, err := rules.CreateBandwidthLimitRule(context.TODO(), fake.ServiceClient(), "501005fa-3b56-4061-aaca-3f24995112e1", opts).ExtractBandwidthLimitRule()
 	th.AssertNoErr(t, err)
 
 	th.AssertEquals(t, 200, r.MaxBurstKBps)
@@ -124,7 +125,7 @@ func TestUpdateBandwidthLimitRule(t *testing.T) {
 		w.Header().Add("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 
-		fmt.Fprintf(w, BandwidthLimitRulesUpdateResult)
+		fmt.Fprint(w, BandwidthLimitRulesUpdateResult)
 	})
 
 	maxKBps := 500
@@ -133,7 +134,7 @@ func TestUpdateBandwidthLimitRule(t *testing.T) {
 		MaxKBps:      &maxKBps,
 		MaxBurstKBps: &maxBurstKBps,
 	}
-	r, err := rules.UpdateBandwidthLimitRule(fake.ServiceClient(), "501005fa-3b56-4061-aaca-3f24995112e1", "30a57f4a-336b-4382-8275-d708babd2241", opts).ExtractBandwidthLimitRule()
+	r, err := rules.UpdateBandwidthLimitRule(context.TODO(), fake.ServiceClient(), "501005fa-3b56-4061-aaca-3f24995112e1", "30a57f4a-336b-4382-8275-d708babd2241", opts).ExtractBandwidthLimitRule()
 	th.AssertNoErr(t, err)
 
 	th.AssertEquals(t, 0, r.MaxBurstKBps)
@@ -150,7 +151,7 @@ func TestDeleteBandwidthLimitRule(t *testing.T) {
 		w.WriteHeader(http.StatusNoContent)
 	})
 
-	res := rules.DeleteBandwidthLimitRule(fake.ServiceClient(), "501005fa-3b56-4061-aaca-3f24995112e1", "30a57f4a-336b-4382-8275-d708babd2241")
+	res := rules.DeleteBandwidthLimitRule(context.TODO(), fake.ServiceClient(), "501005fa-3b56-4061-aaca-3f24995112e1", "30a57f4a-336b-4382-8275-d708babd2241")
 	th.AssertNoErr(t, res.Err)
 }
 
@@ -165,7 +166,7 @@ func TestListDSCPMarkingRule(t *testing.T) {
 		w.Header().Add("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 
-		fmt.Fprintf(w, DSCPMarkingRulesListResult)
+		fmt.Fprint(w, DSCPMarkingRulesListResult)
 	})
 
 	count := 0
@@ -174,7 +175,7 @@ func TestListDSCPMarkingRule(t *testing.T) {
 		fake.ServiceClient(),
 		"501005fa-3b56-4061-aaca-3f24995112e1",
 		rules.DSCPMarkingRulesListOpts{},
-	).EachPage(func(page pagination.Page) (bool, error) {
+	).EachPage(context.TODO(), func(_ context.Context, page pagination.Page) (bool, error) {
 		count++
 		actual, err := rules.ExtractDSCPMarkingRules(page)
 		if err != nil {
@@ -211,10 +212,10 @@ func TestGetDSCPMarkingRule(t *testing.T) {
 		w.Header().Add("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 
-		fmt.Fprintf(w, DSCPMarkingRuleGetResult)
+		fmt.Fprint(w, DSCPMarkingRuleGetResult)
 	})
 
-	r, err := rules.GetDSCPMarkingRule(fake.ServiceClient(), "501005fa-3b56-4061-aaca-3f24995112e1", "30a57f4a-336b-4382-8275-d708babd2241").ExtractDSCPMarkingRule()
+	r, err := rules.GetDSCPMarkingRule(context.TODO(), fake.ServiceClient(), "501005fa-3b56-4061-aaca-3f24995112e1", "30a57f4a-336b-4382-8275-d708babd2241").ExtractDSCPMarkingRule()
 	th.AssertNoErr(t, err)
 
 	th.AssertEquals(t, r.ID, "30a57f4a-336b-4382-8275-d708babd2241")
@@ -235,13 +236,13 @@ func TestCreateDSCPMarkingRule(t *testing.T) {
 		w.Header().Add("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
 
-		fmt.Fprintf(w, DSCPMarkingRuleCreateResult)
+		fmt.Fprint(w, DSCPMarkingRuleCreateResult)
 	})
 
 	opts := rules.CreateDSCPMarkingRuleOpts{
 		DSCPMark: 20,
 	}
-	r, err := rules.CreateDSCPMarkingRule(fake.ServiceClient(), "501005fa-3b56-4061-aaca-3f24995112e1", opts).ExtractDSCPMarkingRule()
+	r, err := rules.CreateDSCPMarkingRule(context.TODO(), fake.ServiceClient(), "501005fa-3b56-4061-aaca-3f24995112e1", opts).ExtractDSCPMarkingRule()
 	th.AssertNoErr(t, err)
 
 	th.AssertEquals(t, "30a57f4a-336b-4382-8275-d708babd2241", r.ID)
@@ -262,14 +263,14 @@ func TestUpdateDSCPMarkingRule(t *testing.T) {
 		w.Header().Add("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 
-		fmt.Fprintf(w, DSCPMarkingRuleUpdateResult)
+		fmt.Fprint(w, DSCPMarkingRuleUpdateResult)
 	})
 
 	dscpMark := 26
 	opts := rules.UpdateDSCPMarkingRuleOpts{
 		DSCPMark: &dscpMark,
 	}
-	r, err := rules.UpdateDSCPMarkingRule(fake.ServiceClient(), "501005fa-3b56-4061-aaca-3f24995112e1", "30a57f4a-336b-4382-8275-d708babd2241", opts).ExtractDSCPMarkingRule()
+	r, err := rules.UpdateDSCPMarkingRule(context.TODO(), fake.ServiceClient(), "501005fa-3b56-4061-aaca-3f24995112e1", "30a57f4a-336b-4382-8275-d708babd2241", opts).ExtractDSCPMarkingRule()
 	th.AssertNoErr(t, err)
 
 	th.AssertEquals(t, "30a57f4a-336b-4382-8275-d708babd2241", r.ID)
@@ -286,7 +287,7 @@ func TestDeleteDSCPMarkingRule(t *testing.T) {
 		w.WriteHeader(http.StatusNoContent)
 	})
 
-	res := rules.DeleteDSCPMarkingRule(fake.ServiceClient(), "501005fa-3b56-4061-aaca-3f24995112e1", "30a57f4a-336b-4382-8275-d708babd2241")
+	res := rules.DeleteDSCPMarkingRule(context.TODO(), fake.ServiceClient(), "501005fa-3b56-4061-aaca-3f24995112e1", "30a57f4a-336b-4382-8275-d708babd2241")
 	th.AssertNoErr(t, res.Err)
 }
 
@@ -301,7 +302,7 @@ func TestListMinimumBandwidthRule(t *testing.T) {
 		w.Header().Add("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 
-		fmt.Fprintf(w, MinimumBandwidthRulesListResult)
+		fmt.Fprint(w, MinimumBandwidthRulesListResult)
 	})
 
 	count := 0
@@ -310,7 +311,7 @@ func TestListMinimumBandwidthRule(t *testing.T) {
 		fake.ServiceClient(),
 		"501005fa-3b56-4061-aaca-3f24995112e1",
 		rules.MinimumBandwidthRulesListOpts{},
-	).EachPage(func(page pagination.Page) (bool, error) {
+	).EachPage(context.TODO(), func(_ context.Context, page pagination.Page) (bool, error) {
 		count++
 		actual, err := rules.ExtractMinimumBandwidthRules(page)
 		if err != nil {
@@ -348,10 +349,10 @@ func TestGetMinimumBandwidthRule(t *testing.T) {
 		w.Header().Add("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 
-		fmt.Fprintf(w, MinimumBandwidthRulesGetResult)
+		fmt.Fprint(w, MinimumBandwidthRulesGetResult)
 	})
 
-	r, err := rules.GetMinimumBandwidthRule(fake.ServiceClient(), "501005fa-3b56-4061-aaca-3f24995112e1", "30a57f4a-336b-4382-8275-d708babd2241").ExtractMinimumBandwidthRule()
+	r, err := rules.GetMinimumBandwidthRule(context.TODO(), fake.ServiceClient(), "501005fa-3b56-4061-aaca-3f24995112e1", "30a57f4a-336b-4382-8275-d708babd2241").ExtractMinimumBandwidthRule()
 	th.AssertNoErr(t, err)
 
 	th.AssertEquals(t, r.ID, "30a57f4a-336b-4382-8275-d708babd2241")
@@ -373,13 +374,13 @@ func TestCreateMinimumBandwidthRule(t *testing.T) {
 		w.Header().Add("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
 
-		fmt.Fprintf(w, MinimumBandwidthRulesCreateResult)
+		fmt.Fprint(w, MinimumBandwidthRulesCreateResult)
 	})
 
 	opts := rules.CreateMinimumBandwidthRuleOpts{
 		MinKBps: 2000,
 	}
-	r, err := rules.CreateMinimumBandwidthRule(fake.ServiceClient(), "501005fa-3b56-4061-aaca-3f24995112e1", opts).ExtractMinimumBandwidthRule()
+	r, err := rules.CreateMinimumBandwidthRule(context.TODO(), fake.ServiceClient(), "501005fa-3b56-4061-aaca-3f24995112e1", opts).ExtractMinimumBandwidthRule()
 	th.AssertNoErr(t, err)
 
 	th.AssertEquals(t, 2000, r.MinKBps)
@@ -399,14 +400,14 @@ func TestUpdateMinimumBandwidthRule(t *testing.T) {
 		w.Header().Add("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 
-		fmt.Fprintf(w, MinimumBandwidthRulesUpdateResult)
+		fmt.Fprint(w, MinimumBandwidthRulesUpdateResult)
 	})
 
 	minKBps := 500
 	opts := rules.UpdateMinimumBandwidthRuleOpts{
 		MinKBps: &minKBps,
 	}
-	r, err := rules.UpdateMinimumBandwidthRule(fake.ServiceClient(), "501005fa-3b56-4061-aaca-3f24995112e1", "30a57f4a-336b-4382-8275-d708babd2241", opts).ExtractMinimumBandwidthRule()
+	r, err := rules.UpdateMinimumBandwidthRule(context.TODO(), fake.ServiceClient(), "501005fa-3b56-4061-aaca-3f24995112e1", "30a57f4a-336b-4382-8275-d708babd2241", opts).ExtractMinimumBandwidthRule()
 	th.AssertNoErr(t, err)
 
 	th.AssertEquals(t, 500, r.MinKBps)
@@ -422,6 +423,6 @@ func TestDeleteMinimumBandwidthRule(t *testing.T) {
 		w.WriteHeader(http.StatusNoContent)
 	})
 
-	res := rules.DeleteMinimumBandwidthRule(fake.ServiceClient(), "501005fa-3b56-4061-aaca-3f24995112e1", "30a57f4a-336b-4382-8275-d708babd2241")
+	res := rules.DeleteMinimumBandwidthRule(context.TODO(), fake.ServiceClient(), "501005fa-3b56-4061-aaca-3f24995112e1", "30a57f4a-336b-4382-8275-d708babd2241")
 	th.AssertNoErr(t, res.Err)
 }

@@ -11,28 +11,52 @@ import (
 )
 
 /*
-BuildRequestBody builds a map[string]interface from the given `struct`. If
-parent is not an empty string, the final map[string]interface returned will
-encapsulate the built one. For example:
+BuildRequestBody builds a map[string]interface from the given `struct`, or
+collection of `structs`. If parent is not an empty string, the final
+map[string]interface returned will encapsulate the built one. Parent is
+required when passing a list of `structs`.
+For example:
 
-  disk := 1
-  createOpts := flavors.CreateOpts{
-    ID:         "1",
-    Name:       "m1.tiny",
-    Disk:       &disk,
-    RAM:        512,
-    VCPUs:      1,
-    RxTxFactor: 1.0,
-  }
+	disk := 1
+	createOpts := flavors.CreateOpts{
+	  ID:         "1",
+	  Name:       "m1.tiny",
+	  Disk:       &disk,
+	  RAM:        512,
+	  VCPUs:      1,
+	  RxTxFactor: 1.0,
+	}
 
-  body, err := gophercloud.BuildRequestBody(createOpts, "flavor")
+	body, err := gophercloud.BuildRequestBody(createOpts, "flavor")
 
-The above example can be run as-is, however it is recommended to look at how
+
+	opts := []rules.CreateOpts{
+		{
+			Direction:     "ingress",
+			PortRangeMin:  80,
+			EtherType:     rules.EtherType4,
+			PortRangeMax:  80,
+			Protocol:      "tcp",
+			SecGroupID:    "a7734e61-b545-452d-a3cd-0189cbd9747a",
+		},
+		{
+			Direction:    "ingress",
+			PortRangeMin: 443,
+			EtherType:    rules.EtherType4,
+			PortRangeMax: 443,
+			Protocol:     "tcp",
+			SecGroupID:   "a7734e61-b545-452d-a3cd-0189cbd9747a",
+		},
+	}
+
+	body, err := gophercloud.BuildRequestBody(opts, "security_group_rules")
+
+The above examples can be run as-is, however it is recommended to look at how
 BuildRequestBody is used within Gophercloud to more fully understand how it
 fits within the request process as a whole rather than use it directly as shown
 above.
 */
-func BuildRequestBody(opts interface{}, parent string) (map[string]interface{}, error) {
+func BuildRequestBody(opts any, parent string) (map[string]any, error) {
 	optsValue := reflect.ValueOf(opts)
 	if optsValue.Kind() == reflect.Ptr {
 		optsValue = optsValue.Elem()
@@ -43,8 +67,9 @@ func BuildRequestBody(opts interface{}, parent string) (map[string]interface{}, 
 		optsType = optsType.Elem()
 	}
 
-	optsMap := make(map[string]interface{})
-	if optsValue.Kind() == reflect.Struct {
+	optsMap := make(map[string]any)
+	switch optsValue.Kind() {
+	case reflect.Struct:
 		//fmt.Printf("optsValue.Kind() is a reflect.Struct: %+v\n", optsValue.Kind())
 		for i := 0; i < optsValue.NumField(); i++ {
 			v := optsValue.Field(i)
@@ -180,13 +205,26 @@ func BuildRequestBody(opts interface{}, parent string) (map[string]interface{}, 
 		//fmt.Printf("optsMap: %+v\n", optsMap)
 
 		if parent != "" {
-			optsMap = map[string]interface{}{parent: optsMap}
+			optsMap = map[string]any{parent: optsMap}
 		}
 		//fmt.Printf("optsMap after parent added: %+v\n", optsMap)
 		return optsMap, nil
+	case reflect.Slice, reflect.Array:
+		optsMaps := make([]map[string]any, optsValue.Len())
+		for i := 0; i < optsValue.Len(); i++ {
+			b, err := BuildRequestBody(optsValue.Index(i).Interface(), "")
+			if err != nil {
+				return nil, err
+			}
+			optsMaps[i] = b
+		}
+		if parent == "" {
+			return nil, fmt.Errorf("Parent is required when passing an array or a slice.")
+		}
+		return map[string]any{parent: optsMaps}, nil
 	}
-	// Return an error if the underlying type of 'opts' isn't a struct.
-	return nil, fmt.Errorf("Options type is not a struct.")
+	// Return an error if we can't work with the underlying type of 'opts'
+	return nil, fmt.Errorf("Options type is not a struct, a slice, or an array.")
 }
 
 // EnabledState is a convenience type, mostly used in Create and Update
@@ -282,10 +320,7 @@ func isZero(v reflect.Value) bool {
 		return z
 	case reflect.Struct:
 		if v.Type() == reflect.TypeOf(t) {
-			if v.Interface().(time.Time).IsZero() {
-				return true
-			}
-			return false
+			return v.Interface().(time.Time).IsZero()
 		}
 		z := true
 		for i := 0; i < v.NumField(); i++ {
@@ -318,10 +353,17 @@ converted into query parameters based on a "q" tag. For example:
 
 will be converted into "?x_bar=AAA&lorem_ipsum=BBB".
 
-The struct's fields may be strings, integers, or boolean values. Fields left at
-their type's zero value will be omitted from the query.
+The struct's fields may be strings, integers, slices, or boolean values. Fields
+left at their type's zero value will be omitted from the query.
+
+Slice are handled in one of two ways:
+
+	type struct Something {
+	   Bar []string `q:"bar"` // E.g. ?bar=1&bar=2
+	   Baz []int    `q:"baz" format="comma-separated"` // E.g. ?baz=1,2
+	}
 */
-func BuildQueryString(opts interface{}) (*url.URL, error) {
+func BuildQueryString(opts any) (*url.URL, error) {
 	optsValue := reflect.ValueOf(opts)
 	if optsValue.Kind() == reflect.Ptr {
 		optsValue = optsValue.Elem()
@@ -358,15 +400,21 @@ func BuildQueryString(opts interface{}) (*url.URL, error) {
 					case reflect.Bool:
 						params.Add(tags[0], strconv.FormatBool(v.Bool()))
 					case reflect.Slice:
+						var values []string
 						switch v.Type().Elem() {
 						case reflect.TypeOf(0):
 							for i := 0; i < v.Len(); i++ {
-								params.Add(tags[0], strconv.FormatInt(v.Index(i).Int(), 10))
+								values = append(values, strconv.FormatInt(v.Index(i).Int(), 10))
 							}
 						default:
 							for i := 0; i < v.Len(); i++ {
-								params.Add(tags[0], v.Index(i).String())
+								values = append(values, v.Index(i).String())
 							}
+						}
+						if sliceFormat := f.Tag.Get("format"); sliceFormat == "comma-separated" {
+							params.Add(tags[0], strings.Join(values, ","))
+						} else {
+							params[tags[0]] = append(params[tags[0]], values...)
 						}
 					case reflect.Map:
 						if v.Type().Key().Kind() == reflect.String && v.Type().Elem().Kind() == reflect.String {
@@ -401,27 +449,27 @@ It accepts an arbitrary tagged structure and produces a string map that's
 suitable for use as the HTTP headers of an outgoing request. Field names are
 mapped to header names based in "h" tags.
 
-  type struct Something {
-    Bar string `h:"x_bar"`
-    Baz int    `h:"lorem_ipsum"`
-  }
+	type struct Something {
+	  Bar string `h:"x_bar"`
+	  Baz int    `h:"lorem_ipsum"`
+	}
 
-  instance := Something{
-    Bar: "AAA",
-    Baz: "BBB",
-  }
+	instance := Something{
+	  Bar: "AAA",
+	  Baz: "BBB",
+	}
 
 will be converted into:
 
-  map[string]string{
-    "x_bar": "AAA",
-    "lorem_ipsum": "BBB",
-  }
+	map[string]string{
+	  "x_bar": "AAA",
+	  "lorem_ipsum": "BBB",
+	}
 
 Untagged fields and fields left at their zero values are skipped. Integers,
 booleans and string values are supported.
 */
-func BuildHeaders(opts interface{}) (map[string]string, error) {
+func BuildHeaders(opts any) (map[string]string, error) {
 	optsValue := reflect.ValueOf(opts)
 	if optsValue.Kind() == reflect.Ptr {
 		optsValue = optsValue.Elem()
@@ -445,10 +493,15 @@ func BuildHeaders(opts interface{}) (map[string]string, error) {
 
 				// if the field is set, add it to the slice of query pieces
 				if !isZero(v) {
+					if v.Kind() == reflect.Ptr {
+						v = v.Elem()
+					}
 					switch v.Kind() {
 					case reflect.String:
 						optsMap[tags[0]] = v.String()
 					case reflect.Int:
+						optsMap[tags[0]] = strconv.FormatInt(v.Int(), 10)
+					case reflect.Int64:
 						optsMap[tags[0]] = strconv.FormatInt(v.Int(), 10)
 					case reflect.Bool:
 						optsMap[tags[0]] = strconv.FormatBool(v.Bool())

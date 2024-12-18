@@ -1,14 +1,15 @@
 package testing
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"testing"
 
-	fake "github.com/gophercloud/gophercloud/openstack/networking/v2/common"
-	"github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/trunks"
-	"github.com/gophercloud/gophercloud/pagination"
-	th "github.com/gophercloud/gophercloud/testhelper"
+	fake "github.com/gophercloud/gophercloud/v2/openstack/networking/v2/common"
+	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/extensions/trunks"
+	"github.com/gophercloud/gophercloud/v2/pagination"
+	th "github.com/gophercloud/gophercloud/v2/testhelper"
 )
 
 func TestCreate(t *testing.T) {
@@ -24,7 +25,7 @@ func TestCreate(t *testing.T) {
 		w.Header().Add("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
 
-		fmt.Fprintf(w, CreateResponse)
+		fmt.Fprint(w, CreateResponse)
 	})
 
 	iTrue := true
@@ -45,12 +46,12 @@ func TestCreate(t *testing.T) {
 			},
 		},
 	}
-	_, err := trunks.Create(fake.ServiceClient(), options).Extract()
+	_, err := trunks.Create(context.TODO(), fake.ServiceClient(), options).Extract()
 	if err == nil {
 		t.Fatalf("Failed to detect missing parent PortID field")
 	}
 	options.PortID = "c373d2fa-3d3b-4492-924c-aff54dea19b6"
-	n, err := trunks.Create(fake.ServiceClient(), options).Extract()
+	n, err := trunks.Create(context.TODO(), fake.ServiceClient(), options).Extract()
 	th.AssertNoErr(t, err)
 
 	th.AssertEquals(t, n.Status, "ACTIVE")
@@ -72,7 +73,7 @@ func TestCreateNoSubports(t *testing.T) {
 		w.Header().Add("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
 
-		fmt.Fprintf(w, CreateNoSubportsResponse)
+		fmt.Fprint(w, CreateNoSubportsResponse)
 	})
 
 	iTrue := true
@@ -82,7 +83,7 @@ func TestCreateNoSubports(t *testing.T) {
 		AdminStateUp: &iTrue,
 		PortID:       "c373d2fa-3d3b-4492-924c-aff54dea19b6",
 	}
-	n, err := trunks.Create(fake.ServiceClient(), options).Extract()
+	n, err := trunks.Create(context.TODO(), fake.ServiceClient(), options).Extract()
 	th.AssertNoErr(t, err)
 
 	th.AssertEquals(t, n.Status, "ACTIVE")
@@ -99,7 +100,7 @@ func TestDelete(t *testing.T) {
 		w.WriteHeader(http.StatusNoContent)
 	})
 
-	res := trunks.Delete(fake.ServiceClient(), "f6a9718c-5a64-43e3-944f-4deccad8e78c")
+	res := trunks.Delete(context.TODO(), fake.ServiceClient(), "f6a9718c-5a64-43e3-944f-4deccad8e78c")
 	th.AssertNoErr(t, res.Err)
 }
 
@@ -114,13 +115,13 @@ func TestList(t *testing.T) {
 		w.Header().Add("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 
-		fmt.Fprintf(w, ListResponse)
+		fmt.Fprint(w, ListResponse)
 	})
 
 	client := fake.ServiceClient()
 	count := 0
 
-	trunks.List(client, trunks.ListOpts{}).EachPage(func(page pagination.Page) (bool, error) {
+	err := trunks.List(client, trunks.ListOpts{}).EachPage(context.TODO(), func(_ context.Context, page pagination.Page) (bool, error) {
 		count++
 		actual, err := trunks.ExtractTrunks(page)
 		if err != nil {
@@ -134,6 +135,7 @@ func TestList(t *testing.T) {
 
 		return true, nil
 	})
+	th.AssertNoErr(t, err)
 
 	if count != 1 {
 		t.Errorf("Expected 1 page, got %d", count)
@@ -151,10 +153,10 @@ func TestGet(t *testing.T) {
 		w.Header().Add("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 
-		fmt.Fprintf(w, GetResponse)
+		fmt.Fprint(w, GetResponse)
 	})
 
-	n, err := trunks.Get(fake.ServiceClient(), "f6a9718c-5a64-43e3-944f-4deccad8e78c").Extract()
+	n, err := trunks.Get(context.TODO(), fake.ServiceClient(), "f6a9718c-5a64-43e3-944f-4deccad8e78c").Extract()
 	th.AssertNoErr(t, err)
 	expectedTrunks, err := ExpectedTrunkSlice()
 	th.AssertNoErr(t, err)
@@ -175,7 +177,7 @@ func TestUpdate(t *testing.T) {
 		w.Header().Add("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 
-		fmt.Fprintf(w, UpdateResponse)
+		fmt.Fprint(w, UpdateResponse)
 	})
 
 	iFalse := false
@@ -186,7 +188,7 @@ func TestUpdate(t *testing.T) {
 		AdminStateUp: &iFalse,
 		Description:  &description,
 	}
-	n, err := trunks.Update(fake.ServiceClient(), "f6a9718c-5a64-43e3-944f-4deccad8e78c", options).Extract()
+	n, err := trunks.Update(context.TODO(), fake.ServiceClient(), "f6a9718c-5a64-43e3-944f-4deccad8e78c", options).Extract()
 	th.AssertNoErr(t, err)
 
 	th.AssertEquals(t, n.Name, name)
@@ -205,12 +207,12 @@ func TestGetSubports(t *testing.T) {
 		w.Header().Add("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 
-		fmt.Fprintf(w, ListSubportsResponse)
+		fmt.Fprint(w, ListSubportsResponse)
 	})
 
 	client := fake.ServiceClient()
 
-	subports, err := trunks.GetSubports(client, "f6a9718c-5a64-43e3-944f-4deccad8e78c").Extract()
+	subports, err := trunks.GetSubports(context.TODO(), client, "f6a9718c-5a64-43e3-944f-4deccad8e78c").Extract()
 	th.AssertNoErr(t, err)
 	th.CheckDeepEquals(t, ExpectedSubports, subports)
 }
@@ -257,7 +259,7 @@ func TestAddSubports(t *testing.T) {
 		th.TestJSONRequest(t, r, AddSubportsRequest)
 		w.WriteHeader(http.StatusOK)
 
-		fmt.Fprintf(w, AddSubportsResponse)
+		fmt.Fprint(w, AddSubportsResponse)
 	})
 
 	client := fake.ServiceClient()
@@ -266,7 +268,7 @@ func TestAddSubports(t *testing.T) {
 		Subports: ExpectedSubports,
 	}
 
-	trunk, err := trunks.AddSubports(client, "f6a9718c-5a64-43e3-944f-4deccad8e78c", opts).Extract()
+	trunk, err := trunks.AddSubports(context.TODO(), client, "f6a9718c-5a64-43e3-944f-4deccad8e78c", opts).Extract()
 	th.AssertNoErr(t, err)
 	expectedTrunk, err := ExpectedSubportsAddedTrunk()
 	th.AssertNoErr(t, err)
@@ -285,7 +287,7 @@ func TestRemoveSubports(t *testing.T) {
 		th.TestJSONRequest(t, r, RemoveSubportsRequest)
 		w.WriteHeader(http.StatusOK)
 
-		fmt.Fprintf(w, RemoveSubportsResponse)
+		fmt.Fprint(w, RemoveSubportsResponse)
 	})
 
 	client := fake.ServiceClient()
@@ -296,7 +298,7 @@ func TestRemoveSubports(t *testing.T) {
 			{PortID: "4c8b2bff-9824-4d4c-9b60-b3f6621b2bab"},
 		},
 	}
-	trunk, err := trunks.RemoveSubports(client, "f6a9718c-5a64-43e3-944f-4deccad8e78c", opts).Extract()
+	trunk, err := trunks.RemoveSubports(context.TODO(), client, "f6a9718c-5a64-43e3-944f-4deccad8e78c", opts).Extract()
 
 	th.AssertNoErr(t, err)
 	expectedTrunk, err := ExpectedSubportsRemovedTrunk()

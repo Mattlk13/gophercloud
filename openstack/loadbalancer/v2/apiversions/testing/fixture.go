@@ -5,9 +5,9 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/gophercloud/gophercloud/openstack/loadbalancer/v2/apiversions"
-	th "github.com/gophercloud/gophercloud/testhelper"
-	"github.com/gophercloud/gophercloud/testhelper/client"
+	"github.com/gophercloud/gophercloud/v2/openstack/loadbalancer/v2/apiversions"
+	th "github.com/gophercloud/gophercloud/v2/testhelper"
+	"github.com/gophercloud/gophercloud/v2/testhelper/client"
 )
 
 const OctaviaAllAPIVersionsResponse = `
@@ -62,19 +62,19 @@ const OctaviaAllAPIVersionsResponse = `
 `
 
 var OctaviaAllAPIVersionResults = []apiversions.APIVersion{
-	apiversions.APIVersion{
+	{
 		ID:     "v1",
 		Status: "DEPRECATED",
 	},
-	apiversions.APIVersion{
+	{
 		ID:     "v2.0",
 		Status: "SUPPORTED",
 	},
-	apiversions.APIVersion{
+	{
 		ID:     "v2.1",
 		Status: "SUPPORTED",
 	},
-	apiversions.APIVersion{
+	{
 		ID:     "v2.2",
 		Status: "CURRENT",
 	},
@@ -88,6 +88,6 @@ func MockListResponse(t *testing.T) {
 		w.Header().Add("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 
-		fmt.Fprintf(w, OctaviaAllAPIVersionsResponse)
+		fmt.Fprint(w, OctaviaAllAPIVersionsResponse)
 	})
 }

@@ -1,15 +1,16 @@
 package testing
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"testing"
 	"time"
 
-	fake "github.com/gophercloud/gophercloud/openstack/networking/v2/common"
-	"github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/subnetpools"
-	"github.com/gophercloud/gophercloud/pagination"
-	th "github.com/gophercloud/gophercloud/testhelper"
+	fake "github.com/gophercloud/gophercloud/v2/openstack/networking/v2/common"
+	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/extensions/subnetpools"
+	"github.com/gophercloud/gophercloud/v2/pagination"
+	th "github.com/gophercloud/gophercloud/v2/testhelper"
 )
 
 func TestList(t *testing.T) {
@@ -23,12 +24,12 @@ func TestList(t *testing.T) {
 		w.Header().Add("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 
-		fmt.Fprintf(w, SubnetPoolsListResult)
+		fmt.Fprint(w, SubnetPoolsListResult)
 	})
 
 	count := 0
 
-	err := subnetpools.List(fake.ServiceClient(), subnetpools.ListOpts{}).EachPage(func(page pagination.Page) (bool, error) {
+	err := subnetpools.List(fake.ServiceClient(), subnetpools.ListOpts{}).EachPage(context.TODO(), func(_ context.Context, page pagination.Page) (bool, error) {
 		count++
 		actual, err := subnetpools.ExtractSubnetPools(page)
 		if err != nil {
@@ -65,10 +66,10 @@ func TestGet(t *testing.T) {
 		w.Header().Add("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 
-		fmt.Fprintf(w, SubnetPoolGetResult)
+		fmt.Fprint(w, SubnetPoolGetResult)
 	})
 
-	s, err := subnetpools.Get(fake.ServiceClient(), "0a738452-8057-4ad3-89c2-92f6a74afa76").Extract()
+	s, err := subnetpools.Get(context.TODO(), fake.ServiceClient(), "0a738452-8057-4ad3-89c2-92f6a74afa76").Extract()
 	th.AssertNoErr(t, err)
 
 	th.AssertEquals(t, s.ID, "0a738452-8057-4ad3-89c2-92f6a74afa76")
@@ -105,7 +106,7 @@ func TestCreate(t *testing.T) {
 		w.Header().Add("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
 
-		fmt.Fprintf(w, SubnetPoolCreateResult)
+		fmt.Fprint(w, SubnetPoolCreateResult)
 	})
 
 	opts := subnetpools.CreateOpts{
@@ -119,7 +120,7 @@ func TestCreate(t *testing.T) {
 		AddressScopeID: "3d4e2e2a-552b-42ad-a16d-820bbf3edaf3",
 		Description:    "ipv4 prefixes",
 	}
-	s, err := subnetpools.Create(fake.ServiceClient(), opts).Extract()
+	s, err := subnetpools.Create(context.TODO(), fake.ServiceClient(), opts).Extract()
 	th.AssertNoErr(t, err)
 
 	th.AssertEquals(t, s.Name, "my_ipv4_pool")
@@ -147,7 +148,7 @@ func TestUpdate(t *testing.T) {
 		w.Header().Add("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 
-		fmt.Fprintf(w, SubnetPoolUpdateResponse)
+		fmt.Fprint(w, SubnetPoolUpdateResponse)
 	})
 
 	nullString := ""
@@ -163,7 +164,7 @@ func TestUpdate(t *testing.T) {
 		DefaultQuota:   &nullInt,
 		Description:    &nullString,
 	}
-	n, err := subnetpools.Update(fake.ServiceClient(), "099546ca-788d-41e5-a76d-17d8cd282d3e", updateOpts).Extract()
+	n, err := subnetpools.Update(context.TODO(), fake.ServiceClient(), "099546ca-788d-41e5-a76d-17d8cd282d3e", updateOpts).Extract()
 	th.AssertNoErr(t, err)
 
 	th.AssertEquals(t, n.Name, "new_subnetpool_name")
@@ -189,6 +190,6 @@ func TestDelete(t *testing.T) {
 		w.WriteHeader(http.StatusNoContent)
 	})
 
-	res := subnetpools.Delete(fake.ServiceClient(), "099546ca-788d-41e5-a76d-17d8cd282d3e")
+	res := subnetpools.Delete(context.TODO(), fake.ServiceClient(), "099546ca-788d-41e5-a76d-17d8cd282d3e")
 	th.AssertNoErr(t, res.Err)
 }

@@ -1,15 +1,15 @@
 package clusters
 
 import (
-	"net/http"
+	"context"
 
-	"github.com/gophercloud/gophercloud"
-	"github.com/gophercloud/gophercloud/pagination"
+	"github.com/gophercloud/gophercloud/v2"
+	"github.com/gophercloud/gophercloud/v2/pagination"
 )
 
 // CreateOptsBuilder Builder.
 type CreateOptsBuilder interface {
-	ToClusterCreateMap() (map[string]interface{}, error)
+	ToClusterCreateMap() (map[string]any, error)
 }
 
 // CreateOpts params
@@ -26,49 +26,42 @@ type CreateOpts struct {
 	Name              string            `json:"name"`
 	NodeCount         *int              `json:"node_count,omitempty"`
 	FloatingIPEnabled *bool             `json:"floating_ip_enabled,omitempty"`
+	MasterLBEnabled   *bool             `json:"master_lb_enabled,omitempty"`
 	FixedNetwork      string            `json:"fixed_network,omitempty"`
 	FixedSubnet       string            `json:"fixed_subnet,omitempty"`
+	MergeLabels       *bool             `json:"merge_labels,omitempty"`
 }
 
 // ToClusterCreateMap constructs a request body from CreateOpts.
-func (opts CreateOpts) ToClusterCreateMap() (map[string]interface{}, error) {
+func (opts CreateOpts) ToClusterCreateMap() (map[string]any, error) {
 	return gophercloud.BuildRequestBody(opts, "")
 }
 
 // Create requests the creation of a new cluster.
-func Create(client *gophercloud.ServiceClient, opts CreateOptsBuilder) (r CreateResult) {
+func Create(ctx context.Context, client *gophercloud.ServiceClient, opts CreateOptsBuilder) (r CreateResult) {
 	b, err := opts.ToClusterCreateMap()
 	if err != nil {
 		r.Err = err
 		return
 	}
-	var result *http.Response
-	result, r.Err = client.Post(createURL(client), b, &r.Body, &gophercloud.RequestOpts{
+	resp, err := client.Post(ctx, createURL(client), b, &r.Body, &gophercloud.RequestOpts{
 		OkCodes: []int{202},
 	})
-
-	if r.Err == nil {
-		r.Header = result.Header
-	}
-
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
 	return
 }
 
 // Get retrieves a specific clusters based on its unique ID.
-func Get(client *gophercloud.ServiceClient, id string) (r GetResult) {
-	var result *http.Response
-	result, r.Err = client.Get(getURL(client, id), &r.Body, &gophercloud.RequestOpts{OkCodes: []int{200}})
-	if r.Err == nil {
-		r.Header = result.Header
-	}
+func Get(ctx context.Context, client *gophercloud.ServiceClient, id string) (r GetResult) {
+	resp, err := client.Get(ctx, getURL(client, id), &r.Body, &gophercloud.RequestOpts{OkCodes: []int{200}})
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
 	return
 }
 
 // Delete deletes the specified cluster ID.
-func Delete(client *gophercloud.ServiceClient, id string) (r DeleteResult) {
-	var result *http.Response
-	result, r.Err = client.Delete(deleteURL(client, id), nil)
-	r.Header = result.Header
+func Delete(ctx context.Context, client *gophercloud.ServiceClient, id string) (r DeleteResult) {
+	resp, err := client.Delete(ctx, deleteURL(client, id), nil)
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
 	return
 }
 
@@ -139,26 +132,26 @@ const (
 )
 
 type UpdateOpts struct {
-	Op    UpdateOp    `json:"op" required:"true"`
-	Path  string      `json:"path" required:"true"`
-	Value interface{} `json:"value,omitempty"`
+	Op    UpdateOp `json:"op" required:"true"`
+	Path  string   `json:"path" required:"true"`
+	Value any      `json:"value,omitempty"`
 }
 
 // UpdateOptsBuilder allows extensions to add additional parameters to the
 // Update request.
 type UpdateOptsBuilder interface {
-	ToClustersUpdateMap() (map[string]interface{}, error)
+	ToClustersUpdateMap() (map[string]any, error)
 }
 
 // ToClusterUpdateMap assembles a request body based on the contents of
 // UpdateOpts.
-func (opts UpdateOpts) ToClustersUpdateMap() (map[string]interface{}, error) {
+func (opts UpdateOpts) ToClustersUpdateMap() (map[string]any, error) {
 	return gophercloud.BuildRequestBody(opts, "")
 }
 
 // Update implements cluster updated request.
-func Update(client *gophercloud.ServiceClient, id string, opts []UpdateOptsBuilder) (r UpdateResult) {
-	var o []map[string]interface{}
+func Update[T UpdateOptsBuilder](ctx context.Context, client *gophercloud.ServiceClient, id string, opts []T) (r UpdateResult) {
+	var o []map[string]any
 	for _, opt := range opts {
 		b, err := opt.ToClustersUpdateMap()
 		if err != nil {
@@ -167,22 +160,53 @@ func Update(client *gophercloud.ServiceClient, id string, opts []UpdateOptsBuild
 		}
 		o = append(o, b)
 	}
-
-	var result *http.Response
-	result, r.Err = client.Patch(updateURL(client, id), o, &r.Body, &gophercloud.RequestOpts{
+	resp, err := client.Patch(ctx, updateURL(client, id), o, &r.Body, &gophercloud.RequestOpts{
 		OkCodes: []int{200, 202},
 	})
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
+	return
+}
 
-	if r.Err == nil {
-		r.Header = result.Header
+type UpgradeOpts struct {
+	ClusterTemplate string `json:"cluster_template" required:"true"`
+	MaxBatchSize    *int   `json:"max_batch_size,omitempty"`
+	NodeGroup       string `json:"nodegroup,omitempty"`
+}
+
+// UpgradeOptsBuilder allows extensions to add additional parameters to the
+// Upgrade request.
+type UpgradeOptsBuilder interface {
+	ToClustersUpgradeMap() (map[string]any, error)
+}
+
+// ToClustersUpgradeMap constructs a request body from UpgradeOpts.
+func (opts UpgradeOpts) ToClustersUpgradeMap() (map[string]any, error) {
+	if opts.MaxBatchSize == nil {
+		defaultMaxBatchSize := 1
+		opts.MaxBatchSize = &defaultMaxBatchSize
 	}
+	return gophercloud.BuildRequestBody(opts, "")
+}
+
+// Upgrade implements cluster upgrade request.
+func Upgrade(ctx context.Context, client *gophercloud.ServiceClient, id string, opts UpgradeOptsBuilder) (r UpgradeResult) {
+	b, err := opts.ToClustersUpgradeMap()
+	if err != nil {
+		r.Err = err
+		return
+	}
+
+	resp, err := client.Post(ctx, upgradeURL(client, id), b, &r.Body, &gophercloud.RequestOpts{
+		OkCodes: []int{202},
+	})
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
 	return
 }
 
 // ResizeOptsBuilder allows extensions to add additional parameters to the
 // Resize request.
 type ResizeOptsBuilder interface {
-	ToClusterResizeMap() (map[string]interface{}, error)
+	ToClusterResizeMap() (map[string]any, error)
 }
 
 // ResizeOpts params
@@ -193,25 +217,20 @@ type ResizeOpts struct {
 }
 
 // ToClusterResizeMap constructs a request body from ResizeOpts.
-func (opts ResizeOpts) ToClusterResizeMap() (map[string]interface{}, error) {
+func (opts ResizeOpts) ToClusterResizeMap() (map[string]any, error) {
 	return gophercloud.BuildRequestBody(opts, "")
 }
 
 // Resize an existing cluster node count.
-func Resize(client *gophercloud.ServiceClient, id string, opts ResizeOptsBuilder) (r ResizeResult) {
+func Resize(ctx context.Context, client *gophercloud.ServiceClient, id string, opts ResizeOptsBuilder) (r ResizeResult) {
 	b, err := opts.ToClusterResizeMap()
 	if err != nil {
 		r.Err = err
 		return
 	}
-
-	var result *http.Response
-	result, r.Err = client.Post(resizeURL(client, id), b, &r.Body, &gophercloud.RequestOpts{
+	resp, err := client.Post(ctx, resizeURL(client, id), b, &r.Body, &gophercloud.RequestOpts{
 		OkCodes: []int{200, 202},
 	})
-
-	if r.Err == nil {
-		r.Header = result.Header
-	}
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
 	return
 }

@@ -1,6 +1,7 @@
 package workflows
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/url"
@@ -8,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gophercloud/gophercloud"
-	"github.com/gophercloud/gophercloud/pagination"
+	"github.com/gophercloud/gophercloud/v2"
+	"github.com/gophercloud/gophercloud/v2/pagination"
 )
 
 // CreateOptsBuilder allows extension to add additional parameters to the Create request.
@@ -37,7 +38,7 @@ func (opts CreateOpts) ToWorkflowCreateParams() (io.Reader, string, error) {
 }
 
 // Create requests the creation of a new execution.
-func Create(client *gophercloud.ServiceClient, opts CreateOptsBuilder) (r CreateResult) {
+func Create(ctx context.Context, client *gophercloud.ServiceClient, opts CreateOptsBuilder) (r CreateResult) {
 	url := createURL(client)
 	var b io.Reader
 	if opts != nil {
@@ -50,27 +51,28 @@ func Create(client *gophercloud.ServiceClient, opts CreateOptsBuilder) (r Create
 		b = tmpB
 	}
 
-	_, r.Err = client.Post(url, nil, &r.Body, &gophercloud.RequestOpts{
-		RawBody: b,
+	resp, err := client.Post(ctx, url, b, &r.Body, &gophercloud.RequestOpts{
 		MoreHeaders: map[string]string{
 			"Content-Type": "text/plain",
 			"Accept":       "", // Drop default JSON Accept header
 		},
 	})
-
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
 	return
 }
 
 // Delete deletes the specified execution.
-func Delete(client *gophercloud.ServiceClient, id string) (r DeleteResult) {
-	_, r.Err = client.Delete(deleteURL(client, id), nil)
+func Delete(ctx context.Context, client *gophercloud.ServiceClient, id string) (r DeleteResult) {
+	resp, err := client.Delete(ctx, deleteURL(client, id), nil)
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
 	return
 }
 
 // Get retrieves details of a single execution.
 // Use Extract to convert its result into an Workflow.
-func Get(client *gophercloud.ServiceClient, id string) (r GetResult) {
-	_, r.Err = client.Get(getURL(client, id), &r.Body, nil)
+func Get(ctx context.Context, client *gophercloud.ServiceClient, id string) (r GetResult) {
+	resp, err := client.Get(ctx, getURL(client, id), &r.Body, nil)
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
 	return
 }
 

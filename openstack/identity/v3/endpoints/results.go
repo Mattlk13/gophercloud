@@ -1,8 +1,8 @@
 package endpoints
 
 import (
-	"github.com/gophercloud/gophercloud"
-	"github.com/gophercloud/gophercloud/pagination"
+	"github.com/gophercloud/gophercloud/v2"
+	"github.com/gophercloud/gophercloud/v2/pagination"
 )
 
 type commonResult struct {
@@ -57,6 +57,9 @@ type Endpoint struct {
 
 	// URL is the url of the Endpoint.
 	URL string `json:"url"`
+
+	// Enabled is whether or not the endpoint is enabled.
+	Enabled bool `json:"enabled"`
 }
 
 // EndpointPage is a single page of Endpoint results.
@@ -66,6 +69,10 @@ type EndpointPage struct {
 
 // IsEmpty returns true if no Endpoints were returned.
 func (r EndpointPage) IsEmpty() (bool, error) {
+	if r.StatusCode == 204 {
+		return true, nil
+	}
+
 	es, err := ExtractEndpoints(r)
 	return len(es) == 0, err
 }

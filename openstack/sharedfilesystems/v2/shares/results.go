@@ -6,8 +6,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/gophercloud/gophercloud"
-	"github.com/gophercloud/gophercloud/pagination"
+	"github.com/gophercloud/gophercloud/v2"
+	"github.com/gophercloud/gophercloud/v2/pagination"
 )
 
 const (
@@ -54,6 +54,8 @@ type Share struct {
 	ShareType string `json:"share_type"`
 	// The name of the share type.
 	ShareTypeName string `json:"share_type_name"`
+	// The UUID of the share group. Available starting from the microversion 2.31
+	ShareGroupID string `json:"share_group_id"`
 	// Size of the share in GB
 	Size int `json:"size"`
 	// UUID of the snapshot from which to create the share
@@ -69,6 +71,8 @@ type Share struct {
 	// Used for filtering backends which either support or do not support share snapshots
 	SnapshotSupport          bool   `json:"snapshot_support"`
 	SourceCgsnapshotMemberID string `json:"source_cgsnapshot_member_id"`
+	// Used for filtering backends which either support or do not support creating shares from snapshots
+	CreateShareFromSnapshotSupport bool `json:"create_share_from_snapshot_support"`
 	// Timestamp when the share was created
 	CreatedAt time.Time `json:"-"`
 	// Timestamp when the share was updated
@@ -176,6 +180,10 @@ func (r SharePage) LastMarker() (string, error) {
 
 // IsEmpty satisifies the IsEmpty method of the Page interface
 func (r SharePage) IsEmpty() (bool, error) {
+	if r.StatusCode == 204 {
+		return true, nil
+	}
+
 	shares, err := ExtractShares(r)
 	return len(shares) == 0, err
 }
@@ -207,31 +215,15 @@ type UpdateResult struct {
 	commonResult
 }
 
-// IDFromName is a convenience function that returns a share's ID given its name.
-func IDFromName(client *gophercloud.ServiceClient, name string) (string, error) {
-	r, err := ListDetail(client, &ListOpts{Name: name}).AllPages()
-	if err != nil {
-		return "", err
-	}
-
-	ss, err := ExtractShares(r)
-	if err != nil {
-		return "", err
-	}
-
-	switch len(ss) {
-	case 0:
-		return "", gophercloud.ErrResourceNotFound{Name: name, ResourceType: "share"}
-	case 1:
-		return ss[0].ID, nil
-	default:
-		return "", gophercloud.ErrMultipleResourcesFound{Name: name, Count: len(ss), ResourceType: "share"}
-	}
+// ListExportLocationsResult contains the result body and error from a
+// ListExportLocations request.
+type ListExportLocationsResult struct {
+	gophercloud.Result
 }
 
-// GetExportLocationsResult contains the result body and error from an
-// GetExportLocations request.
-type GetExportLocationsResult struct {
+// GetExportLocationResult contains the result body and error from a
+// GetExportLocation request.
+type GetExportLocationResult struct {
 	gophercloud.Result
 }
 
@@ -254,13 +246,22 @@ type ExportLocation struct {
 	Preferred bool `json:"preferred"`
 }
 
-// Extract will get the Export Locations from the commonResult
-func (r GetExportLocationsResult) Extract() ([]ExportLocation, error) {
+// Extract will get the Export Locations from the ListExportLocationsResult
+func (r ListExportLocationsResult) Extract() ([]ExportLocation, error) {
 	var s struct {
 		ExportLocations []ExportLocation `json:"export_locations"`
 	}
 	err := r.ExtractInto(&s)
 	return s.ExportLocations, err
+}
+
+// Extract will get the Export Location from the GetExportLocationResult
+func (r GetExportLocationResult) Extract() (*ExportLocation, error) {
+	var s struct {
+		ExportLocation *ExportLocation `json:"export_location"`
+	}
+	err := r.ExtractInto(&s)
+	return s.ExportLocation, err
 }
 
 // AccessRight contains all information associated with an OpenStack share
@@ -355,5 +356,25 @@ func (r MetadataResult) Extract() (map[string]string, error) {
 
 // DeleteMetadatumResult contains the response body and error from a DeleteMetadatum request.
 type DeleteMetadatumResult struct {
+	gophercloud.ErrResult
+}
+
+// RevertResult contains the response error from an Revert request.
+type RevertResult struct {
+	gophercloud.ErrResult
+}
+
+// ResetStatusResult contains the response error from an ResetStatus request.
+type ResetStatusResult struct {
+	gophercloud.ErrResult
+}
+
+// ForceDeleteResult contains the response error from an ForceDelete request.
+type ForceDeleteResult struct {
+	gophercloud.ErrResult
+}
+
+// UnmanageResult contains the response error from an Unmanage request.
+type UnmanageResult struct {
 	gophercloud.ErrResult
 }

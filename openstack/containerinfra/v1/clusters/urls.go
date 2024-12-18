@@ -1,7 +1,7 @@
 package clusters
 
 import (
-	"github.com/gophercloud/gophercloud"
+	"github.com/gophercloud/gophercloud/v2"
 )
 
 var apiName = "clusters"
@@ -36,6 +36,10 @@ func listDetailURL(client *gophercloud.ServiceClient) string {
 
 func updateURL(client *gophercloud.ServiceClient, id string) string {
 	return idURL(client, id)
+}
+
+func upgradeURL(client *gophercloud.ServiceClient, id string) string {
+	return client.ServiceURL("clusters", id, "actions/upgrade")
 }
 
 func resizeURL(client *gophercloud.ServiceClient, id string) string {

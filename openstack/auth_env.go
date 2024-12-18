@@ -3,7 +3,7 @@ package openstack
 import (
 	"os"
 
-	"github.com/gophercloud/gophercloud"
+	"github.com/gophercloud/gophercloud/v2"
 )
 
 var nilOptions = gophercloud.AuthOptions{}
@@ -31,13 +31,14 @@ To use this function, first set the OS_* environment variables (for example,
 by sourcing an `openrc` file), then:
 
 	opts, err := openstack.AuthOptionsFromEnv()
-	provider, err := openstack.AuthenticatedClient(opts)
+	provider, err := openstack.AuthenticatedClient(context.TODO(), opts)
 */
 func AuthOptionsFromEnv() (gophercloud.AuthOptions, error) {
 	authURL := os.Getenv("OS_AUTH_URL")
 	username := os.Getenv("OS_USERNAME")
 	userID := os.Getenv("OS_USERID")
 	password := os.Getenv("OS_PASSWORD")
+	passcode := os.Getenv("OS_PASSCODE")
 	tenantID := os.Getenv("OS_TENANT_ID")
 	tenantName := os.Getenv("OS_TENANT_NAME")
 	domainID := os.Getenv("OS_DOMAIN_ID")
@@ -45,6 +46,7 @@ func AuthOptionsFromEnv() (gophercloud.AuthOptions, error) {
 	applicationCredentialID := os.Getenv("OS_APPLICATION_CREDENTIAL_ID")
 	applicationCredentialName := os.Getenv("OS_APPLICATION_CREDENTIAL_NAME")
 	applicationCredentialSecret := os.Getenv("OS_APPLICATION_CREDENTIAL_SECRET")
+	systemScope := os.Getenv("OS_SYSTEM_SCOPE")
 
 	// If OS_PROJECT_ID is set, overwrite tenantID with the value.
 	if v := os.Getenv("OS_PROJECT_ID"); v != "" {
@@ -73,8 +75,9 @@ func AuthOptionsFromEnv() (gophercloud.AuthOptions, error) {
 		}
 	}
 
-	if password == "" && applicationCredentialID == "" && applicationCredentialName == "" {
+	if password == "" && passcode == "" && applicationCredentialID == "" && applicationCredentialName == "" {
 		err := gophercloud.ErrMissingEnvironmentVariable{
+			// silently ignore TOTP passcode warning, since it is not a common auth method
 			EnvironmentVariable: "OS_PASSWORD",
 		}
 		return nilOptions, err
@@ -107,11 +110,19 @@ func AuthOptionsFromEnv() (gophercloud.AuthOptions, error) {
 		}
 	}
 
+	var scope *gophercloud.AuthScope
+	if systemScope == "all" {
+		scope = &gophercloud.AuthScope{
+			System: true,
+		}
+	}
+
 	ao := gophercloud.AuthOptions{
 		IdentityEndpoint:            authURL,
 		UserID:                      userID,
 		Username:                    username,
 		Password:                    password,
+		Passcode:                    passcode,
 		TenantID:                    tenantID,
 		TenantName:                  tenantName,
 		DomainID:                    domainID,
@@ -119,6 +130,7 @@ func AuthOptionsFromEnv() (gophercloud.AuthOptions, error) {
 		ApplicationCredentialID:     applicationCredentialID,
 		ApplicationCredentialName:   applicationCredentialName,
 		ApplicationCredentialSecret: applicationCredentialSecret,
+		Scope:                       scope,
 	}
 
 	return ao, nil

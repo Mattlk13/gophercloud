@@ -1,6 +1,7 @@
 package testing
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -9,10 +10,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gophercloud/gophercloud/openstack/workflow/v2/workflows"
-	"github.com/gophercloud/gophercloud/pagination"
-	th "github.com/gophercloud/gophercloud/testhelper"
-	fake "github.com/gophercloud/gophercloud/testhelper/client"
+	"github.com/gophercloud/gophercloud/v2/openstack/workflow/v2/workflows"
+	"github.com/gophercloud/gophercloud/v2/pagination"
+	th "github.com/gophercloud/gophercloud/v2/testhelper"
+	fake "github.com/gophercloud/gophercloud/v2/testhelper/client"
 )
 
 func TestCreateWorkflow(t *testing.T) {
@@ -45,11 +46,11 @@ workflow_echo:
 		w.WriteHeader(http.StatusCreated)
 		w.Header().Add("Content-Type", "application/json")
 
-		fmt.Fprintf(w, `{
+		fmt.Fprint(w, `{
 			"workflows": [
 				{
 					"created_at": "2018-09-12 15:48:17",
-					"definition": "---\nversion: '2.0'\n\nworkflow_echo:\n  description: Simple workflow example\n  type: direct\n\n  input:\n    - msg\n\n  tasks:\n    test:\n      action: std.echo output=\"<%% $.msg %%>\"",
+					"definition": "---\nversion: '2.0'\n\nworkflow_echo:\n  description: Simple workflow example\n  type: direct\n\n  input:\n    - msg\n\n  tasks:\n    test:\n      action: std.echo output=\"<% $.msg %>\"",
 					"id": "604a3a1e-94e3-4066-a34a-aa56873ef236",
 					"input": "msg",
 					"name": "workflow_echo",
@@ -69,14 +70,14 @@ workflow_echo:
 		Definition: strings.NewReader(definition),
 	}
 
-	actual, err := workflows.Create(fake.ServiceClient(), opts).Extract()
+	actual, err := workflows.Create(context.TODO(), fake.ServiceClient(), opts).Extract()
 	if err != nil {
 		t.Fatalf("Unable to create workflow: %v", err)
 	}
 
 	updated := time.Date(2018, time.September, 12, 15, 48, 17, 0, time.UTC)
 	expected := []workflows.Workflow{
-		workflows.Workflow{
+		{
 			ID:         "604a3a1e-94e3-4066-a34a-aa56873ef236",
 			Definition: "---\nversion: '2.0'\n\nworkflow_echo:\n  description: Simple workflow example\n  type: direct\n\n  input:\n    - msg\n\n  tasks:\n    test:\n      action: std.echo output=\"<% $.msg %>\"",
 			Name:       "workflow_echo",
@@ -106,7 +107,7 @@ func TestDeleteWorkflow(t *testing.T) {
 		w.WriteHeader(http.StatusAccepted)
 	})
 
-	res := workflows.Delete(fake.ServiceClient(), "604a3a1e-94e3-4066-a34a-aa56873ef236")
+	res := workflows.Delete(context.TODO(), fake.ServiceClient(), "604a3a1e-94e3-4066-a34a-aa56873ef236")
 	th.AssertNoErr(t, res.Err)
 }
 
@@ -117,10 +118,10 @@ func TestGetWorkflow(t *testing.T) {
 		th.TestMethod(t, r, "GET")
 		th.TestHeader(t, r, "X-Auth-token", fake.TokenID)
 		w.Header().Add("Content-Type", "application/json")
-		fmt.Fprintf(w, `
+		fmt.Fprint(w, `
 			{
 				"created_at": "2018-09-12 15:48:17",
-				"definition": "---\nversion: '2.0'\n\nworkflow_echo:\n  description: Simple workflow example\n  type: direct\n\n  input:\n    - msg\n\n  tasks:\n    test:\n      action: std.echo output=\"<%% $.msg %%>\"",
+				"definition": "---\nversion: '2.0'\n\nworkflow_echo:\n  description: Simple workflow example\n  type: direct\n\n  input:\n    - msg\n\n  tasks:\n    test:\n      action: std.echo output=\"<% $.msg %>\"",
 				"id": "604a3a1e-94e3-4066-a34a-aa56873ef236",
 				"input": "msg",
 				"name": "workflow_echo",
@@ -132,7 +133,7 @@ func TestGetWorkflow(t *testing.T) {
 			}
 		`)
 	})
-	actual, err := workflows.Get(fake.ServiceClient(), "1").Extract()
+	actual, err := workflows.Get(context.TODO(), fake.ServiceClient(), "1").Extract()
 	if err != nil {
 		t.Fatalf("Unable to get workflow: %v", err)
 	}
@@ -162,7 +163,9 @@ func TestListWorkflows(t *testing.T) {
 		th.TestMethod(t, r, "GET")
 		th.TestHeader(t, r, "X-Auth-Token", fake.TokenID)
 		w.Header().Add("Content-Type", "application/json")
-		r.ParseForm()
+		if err := r.ParseForm(); err != nil {
+			t.Errorf("Failed to parse request form %v", err)
+		}
 		marker := r.Form.Get("marker")
 		switch marker {
 		case "":
@@ -184,14 +187,14 @@ func TestListWorkflows(t *testing.T) {
 				]
 			}`, th.Server.URL)
 		case "604a3a1e-94e3-4066-a34a-aa56873ef236":
-			fmt.Fprintf(w, `{ "workflows": [] }`)
+			fmt.Fprint(w, `{ "workflows": [] }`)
 		default:
 			t.Fatalf("Unexpected marker: [%s]", marker)
 		}
 	})
 	pages := 0
 	// Get all workflows
-	err := workflows.List(fake.ServiceClient(), nil).EachPage(func(page pagination.Page) (bool, error) {
+	err := workflows.List(fake.ServiceClient(), nil).EachPage(context.TODO(), func(_ context.Context, page pagination.Page) (bool, error) {
 		pages++
 		actual, err := workflows.ExtractWorkflows(page)
 		if err != nil {
@@ -200,7 +203,7 @@ func TestListWorkflows(t *testing.T) {
 
 		updated := time.Date(2018, time.September, 12, 15, 48, 17, 0, time.UTC)
 		expected := []workflows.Workflow{
-			workflows.Workflow{
+			{
 				ID:         "604a3a1e-94e3-4066-a34a-aa56873ef236",
 				Definition: "---\nversion: '2.0'\n\nworkflow_echo:\n  description: Simple workflow example\n  type: direct\n\n  input:\n    - msg\n\n  tasks:\n    test:\n      action: std.echo output=\"<% $.msg %>\"",
 				Name:       "workflow_echo",
@@ -229,16 +232,16 @@ func TestListWorkflows(t *testing.T) {
 
 func TestToWorkflowListQuery(t *testing.T) {
 	for expected, opts := range map[string]*workflows.ListOpts{
-		newValue("tags", `tag1,tag2`): &workflows.ListOpts{
+		newValue("tags", `tag1,tag2`): {
 			Tags: []string{"tag1", "tag2"},
 		},
-		newValue("name", `neq:invalid_name`): &workflows.ListOpts{
+		newValue("name", `neq:invalid_name`): {
 			Name: &workflows.ListFilter{
 				Filter: workflows.FilterNEQ,
 				Value:  "invalid_name",
 			},
 		},
-		newValue("created_at", `gt:2018-01-01 00:00:00`): &workflows.ListOpts{
+		newValue("created_at", `gt:2018-01-01 00:00:00`): {
 			CreatedAt: &workflows.ListDateFilter{
 				Filter: workflows.FilterGT,
 				Value:  time.Date(2018, time.January, 1, 0, 0, 0, 0, time.UTC),

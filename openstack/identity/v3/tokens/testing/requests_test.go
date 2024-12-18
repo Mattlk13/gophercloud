@@ -1,34 +1,36 @@
 package testing
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"testing"
 	"time"
 
-	"github.com/gophercloud/gophercloud"
-	"github.com/gophercloud/gophercloud/openstack/identity/v3/tokens"
-	"github.com/gophercloud/gophercloud/testhelper"
+	"github.com/gophercloud/gophercloud/v2"
+	"github.com/gophercloud/gophercloud/v2/openstack/identity/v3/tokens"
+	th "github.com/gophercloud/gophercloud/v2/testhelper"
+	"github.com/gophercloud/gophercloud/v2/testhelper/client"
 )
 
 // authTokenPost verifies that providing certain AuthOptions and Scope results in an expected JSON structure.
 func authTokenPost(t *testing.T, options tokens.AuthOptions, scope *tokens.Scope, requestJSON string) {
-	testhelper.SetupHTTP()
-	defer testhelper.TeardownHTTP()
+	th.SetupHTTP()
+	defer th.TeardownHTTP()
 
 	client := gophercloud.ServiceClient{
 		ProviderClient: &gophercloud.ProviderClient{},
-		Endpoint:       testhelper.Endpoint(),
+		Endpoint:       th.Endpoint(),
 	}
 
-	testhelper.Mux.HandleFunc("/auth/tokens", func(w http.ResponseWriter, r *http.Request) {
-		testhelper.TestMethod(t, r, "POST")
-		testhelper.TestHeader(t, r, "Content-Type", "application/json")
-		testhelper.TestHeader(t, r, "Accept", "application/json")
-		testhelper.TestJSONRequest(t, r, requestJSON)
+	th.Mux.HandleFunc("/auth/tokens", func(w http.ResponseWriter, r *http.Request) {
+		th.TestMethod(t, r, "POST")
+		th.TestHeader(t, r, "Content-Type", "application/json")
+		th.TestHeader(t, r, "Accept", "application/json")
+		th.TestJSONRequest(t, r, requestJSON)
 
 		w.WriteHeader(http.StatusCreated)
-		fmt.Fprintf(w, `{
+		fmt.Fprint(w, `{
 			"token": {
 				"expires_at": "2014-10-02T13:45:00.000000Z"
 			}
@@ -42,18 +44,18 @@ func authTokenPost(t *testing.T, options tokens.AuthOptions, scope *tokens.Scope
 	expected := &tokens.Token{
 		ExpiresAt: time.Date(2014, 10, 2, 13, 45, 0, 0, time.UTC),
 	}
-	actual, err := tokens.Create(&client, &options).Extract()
-	testhelper.AssertNoErr(t, err)
-	testhelper.CheckDeepEquals(t, expected, actual)
+	actual, err := tokens.Create(context.TODO(), &client, &options).Extract()
+	th.AssertNoErr(t, err)
+	th.CheckDeepEquals(t, expected, actual)
 }
 
 func authTokenPostErr(t *testing.T, options tokens.AuthOptions, scope *tokens.Scope, includeToken bool, expectedErr error) {
-	testhelper.SetupHTTP()
-	defer testhelper.TeardownHTTP()
+	th.SetupHTTP()
+	defer th.TeardownHTTP()
 
 	client := gophercloud.ServiceClient{
 		ProviderClient: &gophercloud.ProviderClient{},
-		Endpoint:       testhelper.Endpoint(),
+		Endpoint:       th.Endpoint(),
 	}
 	if includeToken {
 		client.TokenID = "abcdef123456"
@@ -63,7 +65,7 @@ func authTokenPostErr(t *testing.T, options tokens.AuthOptions, scope *tokens.Sc
 		options.Scope = *scope
 	}
 
-	_, err := tokens.Create(&client, &options).Extract()
+	_, err := tokens.Create(context.TODO(), &client, &options).Extract()
 	if err == nil {
 		t.Errorf("Create did NOT return an error")
 	}
@@ -145,7 +147,7 @@ func TestCreateTokenID(t *testing.T) {
 }
 
 func TestCreateProjectIDScope(t *testing.T) {
-	options := tokens.AuthOptions{UserID: "fenris", Password: "g0t0h311"}
+	options := tokens.AuthOptions{UserID: "someuser", Password: "somepassword"}
 	scope := &tokens.Scope{ProjectID: "123456"}
 	authTokenPost(t, options, scope, `
 		{
@@ -154,8 +156,8 @@ func TestCreateProjectIDScope(t *testing.T) {
 					"methods": ["password"],
 					"password": {
 						"user": {
-							"id": "fenris",
-							"password": "g0t0h311"
+							"id": "someuser",
+							"password": "somepassword"
 						}
 					}
 				},
@@ -170,7 +172,7 @@ func TestCreateProjectIDScope(t *testing.T) {
 }
 
 func TestCreateDomainIDScope(t *testing.T) {
-	options := tokens.AuthOptions{UserID: "fenris", Password: "g0t0h311"}
+	options := tokens.AuthOptions{UserID: "someuser", Password: "somepassword"}
 	scope := &tokens.Scope{DomainID: "1000"}
 	authTokenPost(t, options, scope, `
 		{
@@ -179,8 +181,8 @@ func TestCreateDomainIDScope(t *testing.T) {
 					"methods": ["password"],
 					"password": {
 						"user": {
-							"id": "fenris",
-							"password": "g0t0h311"
+							"id": "someuser",
+							"password": "somepassword"
 						}
 					}
 				},
@@ -195,32 +197,32 @@ func TestCreateDomainIDScope(t *testing.T) {
 }
 
 func TestCreateDomainNameScope(t *testing.T) {
-	options := tokens.AuthOptions{UserID: "fenris", Password: "g0t0h311"}
+	options := tokens.AuthOptions{UserID: "someuser", Password: "somepassword"}
 	scope := &tokens.Scope{DomainName: "evil-plans"}
 	authTokenPost(t, options, scope, `
-                {
-                        "auth": {
-                                "identity": {
-                                        "methods": ["password"],
-                                        "password": {
-                                                "user": {
-                                                        "id": "fenris",
-                                                        "password": "g0t0h311"
-                                                }
-                                        }
-                                },
-                                "scope": {
-                                        "domain": {
-                                                "name": "evil-plans"
-                                        }
-                                }
-                        }
-                }
-        `)
+		{
+			"auth": {
+				"identity": {
+					"methods": ["password"],
+					"password": {
+						"user": {
+							"id": "someuser",
+							"password": "somepassword"
+						}
+					}
+				},
+				"scope": {
+					"domain": {
+						"name": "evil-plans"
+					}
+				}
+			}
+		}
+	`)
 }
 
 func TestCreateProjectNameAndDomainIDScope(t *testing.T) {
-	options := tokens.AuthOptions{UserID: "fenris", Password: "g0t0h311"}
+	options := tokens.AuthOptions{UserID: "someuser", Password: "somepassword"}
 	scope := &tokens.Scope{ProjectName: "world-domination", DomainID: "1000"}
 	authTokenPost(t, options, scope, `
 		{
@@ -229,8 +231,8 @@ func TestCreateProjectNameAndDomainIDScope(t *testing.T) {
 					"methods": ["password"],
 					"password": {
 						"user": {
-							"id": "fenris",
-							"password": "g0t0h311"
+							"id": "someuser",
+							"password": "somepassword"
 						}
 					}
 				},
@@ -248,7 +250,7 @@ func TestCreateProjectNameAndDomainIDScope(t *testing.T) {
 }
 
 func TestCreateProjectNameAndDomainNameScope(t *testing.T) {
-	options := tokens.AuthOptions{UserID: "fenris", Password: "g0t0h311"}
+	options := tokens.AuthOptions{UserID: "someuser", Password: "somepassword"}
 	scope := &tokens.Scope{ProjectName: "world-domination", DomainName: "evil-plans"}
 	authTokenPost(t, options, scope, `
 		{
@@ -257,8 +259,8 @@ func TestCreateProjectNameAndDomainNameScope(t *testing.T) {
 					"methods": ["password"],
 					"password": {
 						"user": {
-							"id": "fenris",
-							"password": "g0t0h311"
+							"id": "someuser",
+							"password": "somepassword"
 						}
 					}
 				},
@@ -273,6 +275,137 @@ func TestCreateProjectNameAndDomainNameScope(t *testing.T) {
 			}
 		}
 	`)
+}
+
+func TestCreateSystemScope(t *testing.T) {
+	options := tokens.AuthOptions{UserID: "someuser", Password: "somepassword"}
+	scope := &tokens.Scope{System: true}
+	authTokenPost(t, options, scope, `
+		{
+			"auth": {
+				"identity": {
+					"methods": ["password"],
+					"password": {
+						"user": {
+							"id": "someuser",
+							"password": "somepassword"
+						}
+					}
+				},
+				"scope": {
+					"system": {
+						"all": true
+					}
+				}
+			}
+		}
+	`)
+}
+
+func TestCreateUserIDPasswordTrustID(t *testing.T) {
+	th.SetupHTTP()
+	defer th.TeardownHTTP()
+
+	requestJSON := `{
+		"auth": {
+			"identity": {
+				"methods": ["password"],
+				"password": {
+					"user": { "id": "demo", "password": "squirrel!" }
+				}
+			},
+			"scope": {
+				"OS-TRUST:trust": {
+					"id": "95946f9eef864fdc993079d8fe3e5747"
+				}
+			}
+		}
+	}`
+	responseJSON := `{
+		"token": {
+			"OS-TRUST:trust": {
+				"id": "95946f9eef864fdc993079d8fe3e5747",
+				"impersonation": false,
+				"trustee_user": {
+					"id": "64f9caa2872b442c98d42a986ee3b37a"
+				},
+				"trustor_user": {
+					"id": "c88693b7c81c408e9084ac1e51082bfb"
+				}
+			},
+			"audit_ids": [
+				"wwcoUZGPR6mCIIl-COn8Kg"
+			],
+			"catalog": [],
+			"expires_at": "2024-02-28T12:10:39.000000Z",
+			"issued_at": "2024-02-28T11:10:39.000000Z",
+			"methods": [
+				"password"
+			],
+			"project": {
+				"domain": {
+					"id": "default",
+					"name": "Default"
+				},
+				"id": "1fd93a4455c74d2ea94b929fc5f0e488",
+				"name": "admin"
+			},
+			"roles": [],
+			"user": {
+				"domain": {
+					"id": "default",
+					"name": "Default"
+				},
+				"id": "64f9caa2872b442c98d42a986ee3b37a",
+				"name": "demo",
+				"password_expires_at": null
+			}
+		}
+	}`
+	th.Mux.HandleFunc("/auth/tokens", func(w http.ResponseWriter, r *http.Request) {
+		th.TestMethod(t, r, "POST")
+		th.TestHeader(t, r, "Content-Type", "application/json")
+		th.TestHeader(t, r, "Accept", "application/json")
+		th.TestJSONRequest(t, r, requestJSON)
+
+		w.WriteHeader(http.StatusCreated)
+		fmt.Fprint(w, responseJSON)
+	})
+
+	ao := gophercloud.AuthOptions{
+		UserID:   "demo",
+		Password: "squirrel!",
+		Scope: &gophercloud.AuthScope{
+			TrustID: "95946f9eef864fdc993079d8fe3e5747",
+		},
+	}
+
+	rsp := tokens.Create(context.TODO(), client.ServiceClient(), &ao)
+
+	token, err := rsp.Extract()
+	if err != nil {
+		t.Errorf("Create returned an error: %v", err)
+	}
+	expectedToken := &tokens.Token{
+		ExpiresAt: time.Date(2024, 02, 28, 12, 10, 39, 0, time.UTC),
+	}
+	th.AssertDeepEquals(t, expectedToken, token)
+
+	trust, err := rsp.ExtractTrust()
+	if err != nil {
+		t.Errorf("ExtractTrust returned an error: %v", err)
+	}
+	expectedTrust := &tokens.Trust{
+		ID:            "95946f9eef864fdc993079d8fe3e5747",
+		Impersonation: false,
+		TrusteeUserID: tokens.TrustUser{
+			ID: "64f9caa2872b442c98d42a986ee3b37a",
+		},
+		TrustorUserID: tokens.TrustUser{
+			ID: "c88693b7c81c408e9084ac1e51082bfb",
+		},
+	}
+	th.AssertDeepEquals(t, expectedTrust, trust)
 }
 
 func TestCreateApplicationCredentialIDAndSecret(t *testing.T) {
@@ -294,7 +427,7 @@ func TestCreateApplicationCredentialIDAndSecret(t *testing.T) {
 }
 
 func TestCreateApplicationCredentialNameAndSecret(t *testing.T) {
-	authTokenPost(t, tokens.AuthOptions{ApplicationCredentialName: "myappcred", ApplicationCredentialSecret: "mysecret", Username: "fenris", DomainName: "evil-plans"}, nil, `
+	authTokenPost(t, tokens.AuthOptions{ApplicationCredentialName: "myappcred", ApplicationCredentialSecret: "mysecret", Username: "someuser", DomainName: "evil-plans"}, nil, `
 		{
 			"auth": {
 				"identity": {
@@ -302,7 +435,7 @@ func TestCreateApplicationCredentialNameAndSecret(t *testing.T) {
 						"name": "myappcred",
 						"secret": "mysecret",
 						"user": {
-							"name": "fenris",
+							"name": "someuser",
 							"domain": {
 								"name": "evil-plans"
 							}
@@ -317,20 +450,82 @@ func TestCreateApplicationCredentialNameAndSecret(t *testing.T) {
 	`)
 }
 
+func TestCreateTOTPProjectNameAndDomainNameScope(t *testing.T) {
+	options := tokens.AuthOptions{UserID: "someuser", Passcode: "12345678"}
+	scope := &tokens.Scope{ProjectName: "world-domination", DomainName: "evil-plans"}
+	authTokenPost(t, options, scope, `
+		{
+			"auth": {
+				"identity": {
+					"methods": ["totp"],
+					"totp": {
+						"user": {
+							"id": "someuser",
+							"passcode": "12345678"
+						}
+					}
+				},
+				"scope": {
+					"project": {
+						"domain": {
+							"name": "evil-plans"
+						},
+						"name": "world-domination"
+					}
+				}
+			}
+		}
+	`)
+}
+
+func TestCreatePasswordTOTPProjectNameAndDomainNameScope(t *testing.T) {
+	options := tokens.AuthOptions{UserID: "someuser", Password: "somepassword", Passcode: "12345678"}
+	scope := &tokens.Scope{ProjectName: "world-domination", DomainName: "evil-plans"}
+	authTokenPost(t, options, scope, `
+		{
+			"auth": {
+				"identity": {
+					"methods": ["password","totp"],
+					"password": {
+						"user": {
+							"id": "someuser",
+							"password": "somepassword"
+						}
+					},
+					"totp": {
+						"user": {
+							"id": "someuser",
+							"passcode": "12345678"
+						}
+					}
+				},
+				"scope": {
+					"project": {
+						"domain": {
+							"name": "evil-plans"
+						},
+						"name": "world-domination"
+					}
+				}
+			}
+		}
+	`)
+}
+
 func TestCreateExtractsTokenFromResponse(t *testing.T) {
-	testhelper.SetupHTTP()
-	defer testhelper.TeardownHTTP()
+	th.SetupHTTP()
+	defer th.TeardownHTTP()
 
 	client := gophercloud.ServiceClient{
 		ProviderClient: &gophercloud.ProviderClient{},
-		Endpoint:       testhelper.Endpoint(),
+		Endpoint:       th.Endpoint(),
 	}
 
-	testhelper.Mux.HandleFunc("/auth/tokens", func(w http.ResponseWriter, r *http.Request) {
+	th.Mux.HandleFunc("/auth/tokens", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Add("X-Subject-Token", "aaa111")
 
 		w.WriteHeader(http.StatusCreated)
-		fmt.Fprintf(w, `{
+		fmt.Fprint(w, `{
 			"token": {
 				"expires_at": "2014-10-02T13:45:00.000000Z"
 			}
@@ -338,7 +533,7 @@ func TestCreateExtractsTokenFromResponse(t *testing.T) {
 	})
 
 	options := tokens.AuthOptions{UserID: "me", Password: "shhh"}
-	token, err := tokens.Create(&client, &options).Extract()
+	token, err := tokens.Create(context.TODO(), &client, &options).Extract()
 	if err != nil {
 		t.Fatalf("Create returned an error: %v", err)
 	}
@@ -457,30 +652,30 @@ func TestCreateFailureEmptyScope(t *testing.T) {
 */
 
 func TestGetRequest(t *testing.T) {
-	testhelper.SetupHTTP()
-	defer testhelper.TeardownHTTP()
+	th.SetupHTTP()
+	defer th.TeardownHTTP()
 
 	client := gophercloud.ServiceClient{
 		ProviderClient: &gophercloud.ProviderClient{
 			TokenID: "12345abcdef",
 		},
-		Endpoint: testhelper.Endpoint(),
+		Endpoint: th.Endpoint(),
 	}
 
-	testhelper.Mux.HandleFunc("/auth/tokens", func(w http.ResponseWriter, r *http.Request) {
-		testhelper.TestMethod(t, r, "GET")
-		testhelper.TestHeader(t, r, "Content-Type", "")
-		testhelper.TestHeader(t, r, "Accept", "application/json")
-		testhelper.TestHeader(t, r, "X-Auth-Token", "12345abcdef")
-		testhelper.TestHeader(t, r, "X-Subject-Token", "abcdef12345")
+	th.Mux.HandleFunc("/auth/tokens", func(w http.ResponseWriter, r *http.Request) {
+		th.TestMethod(t, r, "GET")
+		th.TestHeaderUnset(t, r, "Content-Type")
+		th.TestHeader(t, r, "Accept", "application/json")
+		th.TestHeader(t, r, "X-Auth-Token", "12345abcdef")
+		th.TestHeader(t, r, "X-Subject-Token", "abcdef12345")
 
 		w.WriteHeader(http.StatusOK)
-		fmt.Fprintf(w, `
+		fmt.Fprint(w, `
 			{ "token": { "expires_at": "2014-08-29T13:10:01.000000Z" } }
 		`)
 	})
 
-	token, err := tokens.Get(&client, "abcdef12345").Extract()
+	token, err := tokens.Get(context.TODO(), &client, "abcdef12345").Extract()
 	if err != nil {
 		t.Errorf("Info returned an error: %v", err)
 	}
@@ -496,15 +691,15 @@ func prepareAuthTokenHandler(t *testing.T, expectedMethod string, status int) go
 		ProviderClient: &gophercloud.ProviderClient{
 			TokenID: "12345abcdef",
 		},
-		Endpoint: testhelper.Endpoint(),
+		Endpoint: th.Endpoint(),
 	}
 
-	testhelper.Mux.HandleFunc("/auth/tokens", func(w http.ResponseWriter, r *http.Request) {
-		testhelper.TestMethod(t, r, expectedMethod)
-		testhelper.TestHeader(t, r, "Content-Type", "")
-		testhelper.TestHeader(t, r, "Accept", "application/json")
-		testhelper.TestHeader(t, r, "X-Auth-Token", "12345abcdef")
-		testhelper.TestHeader(t, r, "X-Subject-Token", "abcdef12345")
+	th.Mux.HandleFunc("/auth/tokens", func(w http.ResponseWriter, r *http.Request) {
+		th.TestMethod(t, r, expectedMethod)
+		th.TestHeaderUnset(t, r, "Content-Type")
+		th.TestHeader(t, r, "Accept", "application/json")
+		th.TestHeader(t, r, "X-Auth-Token", "12345abcdef")
+		th.TestHeader(t, r, "X-Subject-Token", "abcdef12345")
 
 		w.WriteHeader(status)
 	})
@@ -513,11 +708,11 @@ func prepareAuthTokenHandler(t *testing.T, expectedMethod string, status int) go
 }
 
 func TestValidateRequestSuccessful(t *testing.T) {
-	testhelper.SetupHTTP()
-	defer testhelper.TeardownHTTP()
+	th.SetupHTTP()
+	defer th.TeardownHTTP()
 	client := prepareAuthTokenHandler(t, "HEAD", http.StatusNoContent)
 
-	ok, err := tokens.Validate(&client, "abcdef12345")
+	ok, err := tokens.Validate(context.TODO(), &client, "abcdef12345")
 	if err != nil {
 		t.Errorf("Unexpected error from Validate: %v", err)
 	}
@@ -528,11 +723,11 @@ func TestValidateRequestSuccessful(t *testing.T) {
 }
 
 func TestValidateRequestFailure(t *testing.T) {
-	testhelper.SetupHTTP()
-	defer testhelper.TeardownHTTP()
+	th.SetupHTTP()
+	defer th.TeardownHTTP()
 	client := prepareAuthTokenHandler(t, "HEAD", http.StatusNotFound)
 
-	ok, err := tokens.Validate(&client, "abcdef12345")
+	ok, err := tokens.Validate(context.TODO(), &client, "abcdef12345")
 	if err != nil {
 		t.Errorf("Unexpected error from Validate: %v", err)
 	}
@@ -543,51 +738,51 @@ func TestValidateRequestFailure(t *testing.T) {
 }
 
 func TestValidateRequestError(t *testing.T) {
-	testhelper.SetupHTTP()
-	defer testhelper.TeardownHTTP()
+	th.SetupHTTP()
+	defer th.TeardownHTTP()
 	client := prepareAuthTokenHandler(t, "HEAD", http.StatusMethodNotAllowed)
 
-	_, err := tokens.Validate(&client, "abcdef12345")
+	_, err := tokens.Validate(context.TODO(), &client, "abcdef12345")
 	if err == nil {
 		t.Errorf("Missing expected error from Validate")
 	}
 }
 
 func TestRevokeRequestSuccessful(t *testing.T) {
-	testhelper.SetupHTTP()
-	defer testhelper.TeardownHTTP()
+	th.SetupHTTP()
+	defer th.TeardownHTTP()
 	client := prepareAuthTokenHandler(t, "DELETE", http.StatusNoContent)
 
-	res := tokens.Revoke(&client, "abcdef12345")
-	testhelper.AssertNoErr(t, res.Err)
+	res := tokens.Revoke(context.TODO(), &client, "abcdef12345")
+	th.AssertNoErr(t, res.Err)
 }
 
 func TestRevokeRequestError(t *testing.T) {
-	testhelper.SetupHTTP()
-	defer testhelper.TeardownHTTP()
+	th.SetupHTTP()
+	defer th.TeardownHTTP()
 	client := prepareAuthTokenHandler(t, "DELETE", http.StatusNotFound)
 
-	res := tokens.Revoke(&client, "abcdef12345")
+	res := tokens.Revoke(context.TODO(), &client, "abcdef12345")
 	if res.Err == nil {
 		t.Errorf("Missing expected error from Revoke")
 	}
 }
 
 func TestNoTokenInResponse(t *testing.T) {
-	testhelper.SetupHTTP()
-	defer testhelper.TeardownHTTP()
+	th.SetupHTTP()
+	defer th.TeardownHTTP()
 
 	client := gophercloud.ServiceClient{
 		ProviderClient: &gophercloud.ProviderClient{},
-		Endpoint:       testhelper.Endpoint(),
+		Endpoint:       th.Endpoint(),
 	}
 
-	testhelper.Mux.HandleFunc("/auth/tokens", func(w http.ResponseWriter, r *http.Request) {
+	th.Mux.HandleFunc("/auth/tokens", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusCreated)
-		fmt.Fprintf(w, `{}`)
+		fmt.Fprint(w, `{}`)
 	})
 
 	options := tokens.AuthOptions{UserID: "me", Password: "squirrel!"}
-	_, err := tokens.Create(&client, &options).Extract()
-	testhelper.AssertNoErr(t, err)
+	_, err := tokens.Create(context.TODO(), &client, &options).Extract()
+	th.AssertNoErr(t, err)
 }

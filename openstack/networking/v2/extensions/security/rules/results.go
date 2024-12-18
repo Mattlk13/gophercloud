@@ -1,8 +1,8 @@
 package rules
 
 import (
-	"github.com/gophercloud/gophercloud"
-	"github.com/gophercloud/gophercloud/pagination"
+	"github.com/gophercloud/gophercloud/v2"
+	"github.com/gophercloud/gophercloud/v2/pagination"
 )
 
 // SecGroupRule represents a rule to dictate the behaviour of incoming or
@@ -17,7 +17,7 @@ type SecGroupRule struct {
 	// instance. An egress rule is applied to traffic leaving the instance.
 	Direction string
 
-	// Descripton of the rule
+	// Description of the rule
 	Description string `json:"description"`
 
 	// Must be IPv4 or IPv6, and addresses represented in CIDR must match the
@@ -80,6 +80,10 @@ func (r SecGroupRulePage) NextPageURL() (string, error) {
 
 // IsEmpty checks whether a SecGroupRulePage struct is empty.
 func (r SecGroupRulePage) IsEmpty() (bool, error) {
+	if r.StatusCode == 204 {
+		return true, nil
+	}
+
 	is, err := ExtractRules(r)
 	return len(is) == 0, err
 }
@@ -99,6 +103,10 @@ type commonResult struct {
 	gophercloud.Result
 }
 
+type bulkResult struct {
+	gophercloud.Result
+}
+
 // Extract is a function that accepts a result and extracts a security rule.
 func (r commonResult) Extract() (*SecGroupRule, error) {
 	var s struct {
@@ -108,10 +116,25 @@ func (r commonResult) Extract() (*SecGroupRule, error) {
 	return s.SecGroupRule, err
 }
 
+// Extract is a function that accepts a result and extracts security rules.
+func (r bulkResult) Extract() ([]SecGroupRule, error) {
+	var s struct {
+		SecGroupRules []SecGroupRule `json:"security_group_rules"`
+	}
+	err := r.ExtractInto(&s)
+	return s.SecGroupRules, err
+}
+
 // CreateResult represents the result of a create operation. Call its Extract
 // method to interpret it as a SecGroupRule.
 type CreateResult struct {
 	commonResult
+}
+
+// CreateBulkResult represents the result of a bulk create operation. Call its
+// Extract method to interpret it as a slice of SecGroupRules.
+type CreateBulkResult struct {
+	bulkResult
 }
 
 // GetResult represents the result of a get operation. Call its Extract

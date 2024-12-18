@@ -1,8 +1,8 @@
 package monitors
 
 import (
-	"github.com/gophercloud/gophercloud"
-	"github.com/gophercloud/gophercloud/pagination"
+	"github.com/gophercloud/gophercloud/v2"
+	"github.com/gophercloud/gophercloud/v2/pagination"
 )
 
 type PoolID struct {
@@ -18,6 +18,9 @@ type PoolID struct {
 // TCP: used to connect to the members using TCP.
 // HTTP: used to send an HTTP request to the member.
 // HTTPS: used to send a secure HTTP request to the member.
+// TLS-HELLO: used to send TLS-HELLO request to the member.
+// UDP-CONNECT: used to send UDP-CONNECT request to the member.
+// SCTP: used to send SCTP request to the member.
 //
 // When a pool has several monitors associated with it, each member of the pool
 // is monitored by all these monitors. If any monitor declares the member as
@@ -35,7 +38,7 @@ type Monitor struct {
 	ProjectID string `json:"project_id"`
 
 	// The type of probe sent by the load balancer to verify the member state,
-	// which is PING, TCP, HTTP, or HTTPS.
+	// which is PING, TCP, HTTP, HTTPS, TLS-HELLO, UDP-CONNECT or SCTP.
 	Type string `json:"type"`
 
 	// The time, in seconds, between sending probes to members.
@@ -50,8 +53,15 @@ type Monitor struct {
 	// member to INACTIVE. A valid value is from 1 to 10.
 	MaxRetries int `json:"max_retries"`
 
+	// Number of allowed connection failures before changing the status of the
+	// member to Error. A valid value is from 1 to 10.
+	MaxRetriesDown int `json:"max_retries_down"`
+
 	// The HTTP method that the monitor uses for requests.
 	HTTPMethod string `json:"http_method"`
+
+	// The HTTP version that the monitor uses for requests.
+	HTTPVersion string `json:"http_version"`
 
 	// The HTTP path of the request sent by the monitor to test the health of a
 	// member. Must be a string beginning with a forward slash (/).
@@ -59,6 +69,9 @@ type Monitor struct {
 
 	// Expected HTTP codes for a passing HTTP(S) monitor.
 	ExpectedCodes string `json:"expected_codes"`
+
+	// The HTTP host header that the monitor uses for requests.
+	DomainName string `json:"domain_name"`
 
 	// The administrative state of the health monitor, which is up (true) or
 	// down (false).
@@ -77,6 +90,10 @@ type Monitor struct {
 
 	// The operating status of the monitor.
 	OperatingStatus string `json:"operating_status"`
+
+	// Tags is a list of resource tags. Tags are arbitrarily defined strings
+	// attached to the resource. New in version 2.5
+	Tags []string `json:"tags"`
 }
 
 // MonitorPage is the page returned by a pager when traversing over a
@@ -103,6 +120,10 @@ func (r MonitorPage) NextPageURL() (string, error) {
 
 // IsEmpty checks whether a MonitorPage struct is empty.
 func (r MonitorPage) IsEmpty() (bool, error) {
+	if r.StatusCode == 204 {
+		return true, nil
+	}
+
 	is, err := ExtractMonitors(r)
 	return len(is) == 0, err
 }

@@ -1,13 +1,14 @@
 package testing
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strings"
 	"testing"
 
-	"github.com/gophercloud/gophercloud/pagination"
-	"github.com/gophercloud/gophercloud/testhelper"
+	"github.com/gophercloud/gophercloud/v2/pagination"
+	th "github.com/gophercloud/gophercloud/v2/testhelper"
 )
 
 // MarkerPager sample and test cases.
@@ -36,18 +37,20 @@ func (r MarkerPageResult) LastMarker() (string, error) {
 }
 
 func createMarkerPaged(t *testing.T) pagination.Pager {
-	testhelper.SetupHTTP()
+	th.SetupHTTP()
 
-	testhelper.Mux.HandleFunc("/page", func(w http.ResponseWriter, r *http.Request) {
-		r.ParseForm()
+	th.Mux.HandleFunc("/page", func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseForm(); err != nil {
+			t.Errorf("Failed to parse request form %v", err)
+		}
 		ms := r.Form["marker"]
 		switch {
 		case len(ms) == 0:
-			fmt.Fprintf(w, "aaa\nbbb\nccc")
+			fmt.Fprint(w, "aaa\nbbb\nccc")
 		case len(ms) == 1 && ms[0] == "ccc":
-			fmt.Fprintf(w, "ddd\neee\nfff")
+			fmt.Fprint(w, "ddd\neee\nfff")
 		case len(ms) == 1 && ms[0] == "fff":
-			fmt.Fprintf(w, "ggg\nhhh\niii")
+			fmt.Fprint(w, "ggg\nhhh\niii")
 		case len(ms) == 1 && ms[0] == "iii":
 			w.WriteHeader(http.StatusNoContent)
 		default:
@@ -63,7 +66,7 @@ func createMarkerPaged(t *testing.T) pagination.Pager {
 		return p
 	}
 
-	return pagination.NewPager(client, testhelper.Server.URL+"/page", createPage)
+	return pagination.NewPager(client, th.Server.URL+"/page", createPage)
 }
 
 func ExtractMarkerStrings(page pagination.Page) ([]string, error) {
@@ -80,10 +83,10 @@ func ExtractMarkerStrings(page pagination.Page) ([]string, error) {
 
 func TestEnumerateMarker(t *testing.T) {
 	pager := createMarkerPaged(t)
-	defer testhelper.TeardownHTTP()
+	defer th.TeardownHTTP()
 
 	callCount := 0
-	err := pager.EachPage(func(page pagination.Page) (bool, error) {
+	err := pager.EachPage(context.TODO(), func(_ context.Context, page pagination.Page) (bool, error) {
 		actual, err := ExtractMarkerStrings(page)
 		if err != nil {
 			return false, err
@@ -104,24 +107,24 @@ func TestEnumerateMarker(t *testing.T) {
 			return false, nil
 		}
 
-		testhelper.CheckDeepEquals(t, expected, actual)
+		th.CheckDeepEquals(t, expected, actual)
 
 		callCount++
 		return true, nil
 	})
-	testhelper.AssertNoErr(t, err)
-	testhelper.AssertEquals(t, callCount, 3)
+	th.AssertNoErr(t, err)
+	th.AssertEquals(t, callCount, 3)
 }
 
 func TestAllPagesMarker(t *testing.T) {
 	pager := createMarkerPaged(t)
-	defer testhelper.TeardownHTTP()
+	defer th.TeardownHTTP()
 
-	page, err := pager.AllPages()
-	testhelper.AssertNoErr(t, err)
+	page, err := pager.AllPages(context.TODO())
+	th.AssertNoErr(t, err)
 
 	expected := []string{"aaa", "bbb", "ccc", "ddd", "eee", "fff", "ggg", "hhh", "iii"}
 	actual, err := ExtractMarkerStrings(page)
-	testhelper.AssertNoErr(t, err)
-	testhelper.CheckDeepEquals(t, expected, actual)
+	th.AssertNoErr(t, err)
+	th.CheckDeepEquals(t, expected, actual)
 }

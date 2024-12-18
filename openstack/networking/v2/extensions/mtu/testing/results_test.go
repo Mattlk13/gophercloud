@@ -1,15 +1,16 @@
 package testing
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"testing"
 
-	fake "github.com/gophercloud/gophercloud/openstack/networking/v2/common"
-	"github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/mtu"
-	"github.com/gophercloud/gophercloud/openstack/networking/v2/networks"
-	nettest "github.com/gophercloud/gophercloud/openstack/networking/v2/networks/testing"
-	th "github.com/gophercloud/gophercloud/testhelper"
+	fake "github.com/gophercloud/gophercloud/v2/openstack/networking/v2/common"
+	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/extensions/mtu"
+	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/networks"
+	nettest "github.com/gophercloud/gophercloud/v2/openstack/networking/v2/networks/testing"
+	th "github.com/gophercloud/gophercloud/v2/testhelper"
 )
 
 type NetworkMTU struct {
@@ -28,7 +29,7 @@ func TestList(t *testing.T) {
 		w.Header().Add("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 
-		fmt.Fprintf(w, nettest.ListResponse)
+		fmt.Fprint(w, nettest.ListResponse)
 	})
 
 	type NetworkWithMTUExt struct {
@@ -37,7 +38,7 @@ func TestList(t *testing.T) {
 	}
 	var actual []NetworkWithMTUExt
 
-	allPages, err := networks.List(fake.ServiceClient(), networks.ListOpts{}).AllPages()
+	allPages, err := networks.List(fake.ServiceClient(), networks.ListOpts{}).AllPages(context.TODO())
 	th.AssertNoErr(t, err)
 
 	err = networks.ExtractNetworksInto(allPages, &actual)
@@ -58,12 +59,12 @@ func TestGet(t *testing.T) {
 		w.Header().Add("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 
-		fmt.Fprintf(w, nettest.GetResponse)
+		fmt.Fprint(w, nettest.GetResponse)
 	})
 
 	var s NetworkMTU
 
-	err := networks.Get(fake.ServiceClient(), "d32019d3-bc6e-4319-9c1d-6722fc136a22").ExtractInto(&s)
+	err := networks.Get(context.TODO(), fake.ServiceClient(), "d32019d3-bc6e-4319-9c1d-6722fc136a22").ExtractInto(&s)
 	th.AssertNoErr(t, err)
 
 	th.AssertEquals(t, "d32019d3-bc6e-4319-9c1d-6722fc136a22", s.ID)
@@ -84,7 +85,7 @@ func TestCreate(t *testing.T) {
 		w.Header().Add("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
 
-		fmt.Fprintf(w, CreateResponse)
+		fmt.Fprint(w, CreateResponse)
 	})
 
 	iTrue := true
@@ -100,7 +101,7 @@ func TestCreate(t *testing.T) {
 
 	var s NetworkMTU
 
-	err := networks.Create(fake.ServiceClient(), mtuCreateOpts).ExtractInto(&s)
+	err := networks.Create(context.TODO(), fake.ServiceClient(), mtuCreateOpts).ExtractInto(&s)
 	th.AssertNoErr(t, err)
 
 	th.AssertEquals(t, "db193ab3-96e3-4cb3-8fc5-05f4296d0324", s.ID)
@@ -122,7 +123,7 @@ func TestUpdate(t *testing.T) {
 		w.Header().Add("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 
-		fmt.Fprintf(w, UpdateResponse)
+		fmt.Fprint(w, UpdateResponse)
 	})
 
 	iTrue := true
@@ -141,7 +142,7 @@ func TestUpdate(t *testing.T) {
 
 	var s NetworkMTU
 
-	err := networks.Update(fake.ServiceClient(), "4e8e5957-649f-477b-9e5b-f1f75b21c03c", mtuUpdateOpts).ExtractInto(&s)
+	err := networks.Update(context.TODO(), fake.ServiceClient(), "4e8e5957-649f-477b-9e5b-f1f75b21c03c", mtuUpdateOpts).ExtractInto(&s)
 	th.AssertNoErr(t, err)
 
 	th.AssertEquals(t, "4e8e5957-649f-477b-9e5b-f1f75b21c03c", s.ID)

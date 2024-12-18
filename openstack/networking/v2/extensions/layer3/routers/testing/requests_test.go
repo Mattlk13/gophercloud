@@ -1,14 +1,16 @@
 package testing
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"testing"
+	"time"
 
-	fake "github.com/gophercloud/gophercloud/openstack/networking/v2/common"
-	"github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/layer3/routers"
-	"github.com/gophercloud/gophercloud/pagination"
-	th "github.com/gophercloud/gophercloud/testhelper"
+	fake "github.com/gophercloud/gophercloud/v2/openstack/networking/v2/common"
+	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/extensions/layer3/routers"
+	"github.com/gophercloud/gophercloud/v2/pagination"
+	th "github.com/gophercloud/gophercloud/v2/testhelper"
 )
 
 func TestList(t *testing.T) {
@@ -22,7 +24,7 @@ func TestList(t *testing.T) {
 		w.Header().Add("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 
-		fmt.Fprintf(w, `
+		fmt.Fprint(w, `
 {
     "routers": [
         {
@@ -52,7 +54,8 @@ func TestList(t *testing.T) {
                 "external_fixed_ips": [
                     {"ip_address": "192.0.2.17", "subnet_id": "ab561bc4-1a8e-48f2-9fbd-376fcb1a1def"},
                     {"ip_address": "198.51.100.33", "subnet_id": "1d699529-bdfd-43f8-bcaa-bff00c547af2"}
-                ]
+                ],
+                "qos_policy_id": "6601bae5-f15a-4687-8be9-ddec9a2f8a8b"
             },
             "name": "gateway",
             "admin_state_up": true,
@@ -67,7 +70,7 @@ func TestList(t *testing.T) {
 
 	count := 0
 
-	routers.List(fake.ServiceClient(), routers.ListOpts{}).EachPage(func(page pagination.Page) (bool, error) {
+	err := routers.List(fake.ServiceClient(), routers.ListOpts{}).EachPage(context.TODO(), func(_ context.Context, page pagination.Page) (bool, error) {
 		count++
 		actual, err := routers.ExtractRouters(page)
 		if err != nil {
@@ -102,6 +105,7 @@ func TestList(t *testing.T) {
 						{IPAddress: "192.0.2.17", SubnetID: "ab561bc4-1a8e-48f2-9fbd-376fcb1a1def"},
 						{IPAddress: "198.51.100.33", SubnetID: "1d699529-bdfd-43f8-bcaa-bff00c547af2"},
 					},
+					QoSPolicyID: "6601bae5-f15a-4687-8be9-ddec9a2f8a8b",
 				},
 				AdminStateUp: true,
 				Distributed:  false,
@@ -115,6 +119,7 @@ func TestList(t *testing.T) {
 
 		return true, nil
 	})
+	th.AssertNoErr(t, err)
 
 	if count != 1 {
 		t.Errorf("Expected 1 page, got %d", count)
@@ -140,7 +145,8 @@ func TestCreate(t *testing.T) {
          "network_id":"8ca37218-28ff-41cb-9b10-039601ea7e6b",
          "external_fixed_ips": [
              {"subnet_id": "ab561bc4-1a8e-48f2-9fbd-376fcb1a1def"}
-         ]
+         ],
+         "qos_policy_id": "6601bae5-f15a-4687-8be9-ddec9a2f8a8b"
 	  },
 	  "availability_zone_hints": ["zone1", "zone2"]
    }
@@ -150,7 +156,7 @@ func TestCreate(t *testing.T) {
 		w.Header().Add("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
 
-		fmt.Fprintf(w, `
+		fmt.Fprint(w, `
 {
     "router": {
         "status": "ACTIVE",
@@ -159,7 +165,8 @@ func TestCreate(t *testing.T) {
             "enable_snat": false,
             "external_fixed_ips": [
                 {"ip_address": "192.0.2.17", "subnet_id": "ab561bc4-1a8e-48f2-9fbd-376fcb1a1def"}
-            ]
+            ],
+            "qos_policy_id": "6601bae5-f15a-4687-8be9-ddec9a2f8a8b"
         },
         "name": "foo_router",
         "admin_state_up": false,
@@ -174,8 +181,9 @@ func TestCreate(t *testing.T) {
 
 	asu := false
 	enableSNAT := false
+	qosID := "6601bae5-f15a-4687-8be9-ddec9a2f8a8b"
 	efi := []routers.ExternalFixedIP{
-		routers.ExternalFixedIP{
+		{
 			SubnetID: "ab561bc4-1a8e-48f2-9fbd-376fcb1a1def",
 		},
 	}
@@ -183,6 +191,7 @@ func TestCreate(t *testing.T) {
 		NetworkID:        "8ca37218-28ff-41cb-9b10-039601ea7e6b",
 		EnableSNAT:       &enableSNAT,
 		ExternalFixedIPs: efi,
+		QoSPolicyID:      qosID,
 	}
 	options := routers.CreateOpts{
 		Name:                  "foo_router",
@@ -190,7 +199,7 @@ func TestCreate(t *testing.T) {
 		GatewayInfo:           &gwi,
 		AvailabilityZoneHints: []string{"zone1", "zone2"},
 	}
-	r, err := routers.Create(fake.ServiceClient(), options).Extract()
+	r, err := routers.Create(context.TODO(), fake.ServiceClient(), options).Extract()
 	th.AssertNoErr(t, err)
 
 	gwi.ExternalFixedIPs = []routers.ExternalFixedIP{{
@@ -215,7 +224,7 @@ func TestGet(t *testing.T) {
 		w.Header().Add("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 
-		fmt.Fprintf(w, `
+		fmt.Fprint(w, `
 {
     "router": {
         "status": "ACTIVE",
@@ -223,7 +232,8 @@ func TestGet(t *testing.T) {
             "network_id": "85d76829-6415-48ff-9c63-5c5ca8c61ac6",
             "external_fixed_ips": [
                 {"ip_address": "198.51.100.33", "subnet_id": "1d699529-bdfd-43f8-bcaa-bff00c547af2"}
-            ]
+            ],
+            "qos_policy_id": "6601bae5-f15a-4687-8be9-ddec9a2f8a8b"
         },
         "routes": [
             {
@@ -242,7 +252,7 @@ func TestGet(t *testing.T) {
 			`)
 	})
 
-	n, err := routers.Get(fake.ServiceClient(), "a07eea83-7710-4860-931b-5fe220fae533").Extract()
+	n, err := routers.Get(context.TODO(), fake.ServiceClient(), "a07eea83-7710-4860-931b-5fe220fae533").Extract()
 	th.AssertNoErr(t, err)
 
 	th.AssertEquals(t, n.Status, "ACTIVE")
@@ -251,6 +261,7 @@ func TestGet(t *testing.T) {
 		ExternalFixedIPs: []routers.ExternalFixedIP{
 			{IPAddress: "198.51.100.33", SubnetID: "1d699529-bdfd-43f8-bcaa-bff00c547af2"},
 		},
+		QoSPolicyID: "6601bae5-f15a-4687-8be9-ddec9a2f8a8b",
 	})
 	th.AssertEquals(t, n.Name, "router1")
 	th.AssertEquals(t, n.AdminStateUp, true)
@@ -274,7 +285,8 @@ func TestUpdate(t *testing.T) {
     "router": {
 			"name": "new_name",
         "external_gateway_info": {
-            "network_id": "8ca37218-28ff-41cb-9b10-039601ea7e6b"
+            "network_id": "8ca37218-28ff-41cb-9b10-039601ea7e6b",
+            "qos_policy_id": "01ba32e5-f15a-4687-8be9-ddec92a2f8a8"
 		},
         "routes": [
             {
@@ -289,7 +301,73 @@ func TestUpdate(t *testing.T) {
 		w.Header().Add("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 
-		fmt.Fprintf(w, `
+		fmt.Fprint(w, `
+{
+    "router": {
+        "status": "ACTIVE",
+        "external_gateway_info": {
+            "network_id": "8ca37218-28ff-41cb-9b10-039601ea7e6b",
+            "external_fixed_ips": [
+                {"ip_address": "192.0.2.17", "subnet_id": "ab561bc4-1a8e-48f2-9fbd-376fcb1a1def"}
+            ],
+            "qos_policy_id": "01ba32e5-f15a-4687-8be9-ddec92a2f8a8"
+        },
+        "name": "new_name",
+        "admin_state_up": true,
+        "tenant_id": "6b96ff0cb17a4b859e1e575d221683d3",
+        "distributed": false,
+        "id": "8604a0de-7f6b-409a-a47c-a1cc7bc77b2e",
+        "routes": [
+            {
+                "nexthop": "10.1.0.10",
+                "destination": "40.0.1.0/24"
+            }
+        ]
+    }
+}
+		`)
+	})
+
+	gwi := routers.GatewayInfo{
+		NetworkID:   "8ca37218-28ff-41cb-9b10-039601ea7e6b",
+		QoSPolicyID: "01ba32e5-f15a-4687-8be9-ddec92a2f8a8",
+	}
+	r := []routers.Route{{DestinationCIDR: "40.0.1.0/24", NextHop: "10.1.0.10"}}
+	options := routers.UpdateOpts{Name: "new_name", GatewayInfo: &gwi, Routes: &r}
+
+	n, err := routers.Update(context.TODO(), fake.ServiceClient(), "4e8e5957-649f-477b-9e5b-f1f75b21c03c", options).Extract()
+	th.AssertNoErr(t, err)
+
+	gwi.ExternalFixedIPs = []routers.ExternalFixedIP{
+		{IPAddress: "192.0.2.17", SubnetID: "ab561bc4-1a8e-48f2-9fbd-376fcb1a1def"},
+	}
+
+	th.AssertEquals(t, n.Name, "new_name")
+	th.AssertDeepEquals(t, n.GatewayInfo, gwi)
+	th.AssertDeepEquals(t, n.Routes, []routers.Route{{DestinationCIDR: "40.0.1.0/24", NextHop: "10.1.0.10"}})
+}
+
+func TestUpdateWithoutRoutes(t *testing.T) {
+	th.SetupHTTP()
+	defer th.TeardownHTTP()
+
+	th.Mux.HandleFunc("/v2.0/routers/4e8e5957-649f-477b-9e5b-f1f75b21c03c", func(w http.ResponseWriter, r *http.Request) {
+		th.TestMethod(t, r, "PUT")
+		th.TestHeader(t, r, "X-Auth-Token", fake.TokenID)
+		th.TestHeader(t, r, "Content-Type", "application/json")
+		th.TestHeader(t, r, "Accept", "application/json")
+		th.TestJSONRequest(t, r, `
+{
+    "router": {
+        "name": "new_name"
+    }
+}
+		`)
+
+		w.Header().Add("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+
+		fmt.Fprint(w, `
 {
     "router": {
         "status": "ACTIVE",
@@ -315,19 +393,12 @@ func TestUpdate(t *testing.T) {
 		`)
 	})
 
-	gwi := routers.GatewayInfo{NetworkID: "8ca37218-28ff-41cb-9b10-039601ea7e6b"}
-	r := []routers.Route{{DestinationCIDR: "40.0.1.0/24", NextHop: "10.1.0.10"}}
-	options := routers.UpdateOpts{Name: "new_name", GatewayInfo: &gwi, Routes: r}
+	options := routers.UpdateOpts{Name: "new_name"}
 
-	n, err := routers.Update(fake.ServiceClient(), "4e8e5957-649f-477b-9e5b-f1f75b21c03c", options).Extract()
+	n, err := routers.Update(context.TODO(), fake.ServiceClient(), "4e8e5957-649f-477b-9e5b-f1f75b21c03c", options).Extract()
 	th.AssertNoErr(t, err)
 
-	gwi.ExternalFixedIPs = []routers.ExternalFixedIP{
-		{IPAddress: "192.0.2.17", SubnetID: "ab561bc4-1a8e-48f2-9fbd-376fcb1a1def"},
-	}
-
 	th.AssertEquals(t, n.Name, "new_name")
-	th.AssertDeepEquals(t, n.GatewayInfo, gwi)
 	th.AssertDeepEquals(t, n.Routes, []routers.Route{{DestinationCIDR: "40.0.1.0/24", NextHop: "10.1.0.10"}})
 }
 
@@ -351,7 +422,7 @@ func TestAllRoutesRemoved(t *testing.T) {
 		w.Header().Add("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 
-		fmt.Fprintf(w, `
+		fmt.Fprint(w, `
 {
     "router": {
         "status": "ACTIVE",
@@ -370,9 +441,9 @@ func TestAllRoutesRemoved(t *testing.T) {
 	})
 
 	r := []routers.Route{}
-	options := routers.UpdateOpts{Routes: r}
+	options := routers.UpdateOpts{Routes: &r}
 
-	n, err := routers.Update(fake.ServiceClient(), "4e8e5957-649f-477b-9e5b-f1f75b21c03c", options).Extract()
+	n, err := routers.Update(context.TODO(), fake.ServiceClient(), "4e8e5957-649f-477b-9e5b-f1f75b21c03c", options).Extract()
 	th.AssertNoErr(t, err)
 
 	th.AssertDeepEquals(t, n.Routes, []routers.Route{})
@@ -388,7 +459,7 @@ func TestDelete(t *testing.T) {
 		w.WriteHeader(http.StatusNoContent)
 	})
 
-	res := routers.Delete(fake.ServiceClient(), "4e8e5957-649f-477b-9e5b-f1f75b21c03c")
+	res := routers.Delete(context.TODO(), fake.ServiceClient(), "4e8e5957-649f-477b-9e5b-f1f75b21c03c")
 	th.AssertNoErr(t, res.Err)
 }
 
@@ -410,7 +481,7 @@ func TestAddInterface(t *testing.T) {
 		w.Header().Add("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 
-		fmt.Fprintf(w, `
+		fmt.Fprint(w, `
 {
     "subnet_id": "0d32a837-8069-4ec3-84c4-3eef3e10b188",
     "tenant_id": "017d8de156df4177889f31a9bd6edc00",
@@ -421,7 +492,7 @@ func TestAddInterface(t *testing.T) {
 	})
 
 	opts := routers.AddInterfaceOpts{SubnetID: "a2f1f29d-571b-4533-907f-5803ab96ead1"}
-	res, err := routers.AddInterface(fake.ServiceClient(), "4e8e5957-649f-477b-9e5b-f1f75b21c03c", opts).Extract()
+	res, err := routers.AddInterface(context.TODO(), fake.ServiceClient(), "4e8e5957-649f-477b-9e5b-f1f75b21c03c", opts).Extract()
 	th.AssertNoErr(t, err)
 
 	th.AssertEquals(t, "0d32a837-8069-4ec3-84c4-3eef3e10b188", res.SubnetID)
@@ -431,11 +502,11 @@ func TestAddInterface(t *testing.T) {
 }
 
 func TestAddInterfaceRequiredOpts(t *testing.T) {
-	_, err := routers.AddInterface(fake.ServiceClient(), "foo", routers.AddInterfaceOpts{}).Extract()
+	_, err := routers.AddInterface(context.TODO(), fake.ServiceClient(), "foo", routers.AddInterfaceOpts{}).Extract()
 	if err == nil {
 		t.Fatalf("Expected error, got none")
 	}
-	_, err = routers.AddInterface(fake.ServiceClient(), "foo", routers.AddInterfaceOpts{SubnetID: "bar", PortID: "baz"}).Extract()
+	_, err = routers.AddInterface(context.TODO(), fake.ServiceClient(), "foo", routers.AddInterfaceOpts{SubnetID: "bar", PortID: "baz"}).Extract()
 	if err == nil {
 		t.Fatalf("Expected error, got none")
 	}
@@ -459,7 +530,7 @@ func TestRemoveInterface(t *testing.T) {
 		w.Header().Add("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 
-		fmt.Fprintf(w, `
+		fmt.Fprint(w, `
 {
 		"subnet_id": "0d32a837-8069-4ec3-84c4-3eef3e10b188",
 		"tenant_id": "017d8de156df4177889f31a9bd6edc00",
@@ -470,11 +541,148 @@ func TestRemoveInterface(t *testing.T) {
 	})
 
 	opts := routers.RemoveInterfaceOpts{SubnetID: "a2f1f29d-571b-4533-907f-5803ab96ead1"}
-	res, err := routers.RemoveInterface(fake.ServiceClient(), "4e8e5957-649f-477b-9e5b-f1f75b21c03c", opts).Extract()
+	res, err := routers.RemoveInterface(context.TODO(), fake.ServiceClient(), "4e8e5957-649f-477b-9e5b-f1f75b21c03c", opts).Extract()
 	th.AssertNoErr(t, err)
 
 	th.AssertEquals(t, "0d32a837-8069-4ec3-84c4-3eef3e10b188", res.SubnetID)
 	th.AssertEquals(t, "017d8de156df4177889f31a9bd6edc00", res.TenantID)
 	th.AssertEquals(t, "3f990102-4485-4df1-97a0-2c35bdb85b31", res.PortID)
 	th.AssertEquals(t, "9a83fa11-8da5-436e-9afe-3d3ac5ce7770", res.ID)
+}
+
+func TestListL3Agents(t *testing.T) {
+	th.SetupHTTP()
+	defer th.TeardownHTTP()
+
+	th.Mux.HandleFunc("/v2.0/routers/fa3a4aaa-c73f-48aa-a603-8c8bf642b7c0/l3-agents", func(w http.ResponseWriter, r *http.Request) {
+		th.TestMethod(t, r, "GET")
+		th.TestHeader(t, r, "X-Auth-Token", fake.TokenID)
+
+		w.Header().Add("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+
+		fmt.Fprint(w, `
+{
+    "agents": [
+        {
+            "id": "ddbf087c-e38f-4a73-bcb3-c38f2a719a03",
+            "agent_type": "L3 agent",
+            "binary": "neutron-l3-agent",
+            "topic": "l3_agent",
+            "host": "os-ctrl-02",
+            "admin_state_up": true,
+            "created_at": "2017-07-26 23:15:44",
+            "started_at": "2018-06-26 21:46:19",
+            "heartbeat_timestamp": "2019-01-09 10:28:53",
+            "description": "My L3 agent for OpenStack",
+            "resources_synced": true,
+            "availability_zone": "nova",
+            "alive": true,
+            "configurations": {
+                "agent_mode": "legacy",
+                "ex_gw_ports": 2,
+                "floating_ips": 2,
+                "handle_internal_only_routers": true,
+                "interface_driver": "linuxbridge",
+                "interfaces": 1,
+                "log_agent_heartbeats": false,
+                "routers": 2
+            },
+            "resource_versions": {},
+            "ha_state": "standby"
+        },
+        {
+            "id": "4541cc6c-87bc-4cee-bad2-36ca78836c91",
+            "agent_type": "L3 agent",
+            "binary": "neutron-l3-agent",
+            "topic": "l3_agent",
+            "host": "os-ctrl-03",
+            "admin_state_up": true,
+            "created_at": "2017-01-22 14:00:50",
+            "started_at": "2018-11-06 12:09:17",
+            "heartbeat_timestamp": "2019-01-09 10:28:50",
+            "description": "My L3 agent for OpenStack",
+            "resources_synced": true,
+            "availability_zone": "nova",
+            "alive": true,
+            "configurations": {
+                "agent_mode": "legacy",
+                "ex_gw_ports": 2,
+                "floating_ips": 2,
+                "handle_internal_only_routers": true,
+                "interface_driver": "linuxbridge",
+                "interfaces": 1,
+                "log_agent_heartbeats": false,
+                "routers": 2
+            },
+            "resource_versions": {},
+            "ha_state": "active"
+        }
+    ]
+}
+			`)
+	})
+
+	l3AgentsPages, err := routers.ListL3Agents(fake.ServiceClient(), "fa3a4aaa-c73f-48aa-a603-8c8bf642b7c0").AllPages(context.TODO())
+	th.AssertNoErr(t, err)
+	actual, err := routers.ExtractL3Agents(l3AgentsPages)
+	th.AssertNoErr(t, err)
+
+	expected := []routers.L3Agent{
+		{
+			ID:               "ddbf087c-e38f-4a73-bcb3-c38f2a719a03",
+			AdminStateUp:     true,
+			AgentType:        "L3 agent",
+			Description:      "My L3 agent for OpenStack",
+			Alive:            true,
+			ResourcesSynced:  true,
+			Binary:           "neutron-l3-agent",
+			AvailabilityZone: "nova",
+			Configurations: map[string]any{
+				"agent_mode":                   "legacy",
+				"ex_gw_ports":                  float64(2),
+				"floating_ips":                 float64(2),
+				"handle_internal_only_routers": true,
+				"interface_driver":             "linuxbridge",
+				"interfaces":                   float64(1),
+				"log_agent_heartbeats":         false,
+				"routers":                      float64(2),
+			},
+			CreatedAt:          time.Date(2017, 7, 26, 23, 15, 44, 0, time.UTC),
+			StartedAt:          time.Date(2018, 6, 26, 21, 46, 19, 0, time.UTC),
+			HeartbeatTimestamp: time.Date(2019, 1, 9, 10, 28, 53, 0, time.UTC),
+			Host:               "os-ctrl-02",
+			Topic:              "l3_agent",
+			HAState:            "standby",
+			ResourceVersions:   map[string]any{},
+		},
+		{
+			ID:               "4541cc6c-87bc-4cee-bad2-36ca78836c91",
+			AdminStateUp:     true,
+			AgentType:        "L3 agent",
+			Description:      "My L3 agent for OpenStack",
+			Alive:            true,
+			ResourcesSynced:  true,
+			Binary:           "neutron-l3-agent",
+			AvailabilityZone: "nova",
+			Configurations: map[string]any{
+				"agent_mode":                   "legacy",
+				"ex_gw_ports":                  float64(2),
+				"floating_ips":                 float64(2),
+				"handle_internal_only_routers": true,
+				"interface_driver":             "linuxbridge",
+				"interfaces":                   float64(1),
+				"log_agent_heartbeats":         false,
+				"routers":                      float64(2),
+			},
+			CreatedAt:          time.Date(2017, 1, 22, 14, 00, 50, 0, time.UTC),
+			StartedAt:          time.Date(2018, 11, 6, 12, 9, 17, 0, time.UTC),
+			HeartbeatTimestamp: time.Date(2019, 1, 9, 10, 28, 50, 0, time.UTC),
+			Host:               "os-ctrl-03",
+			Topic:              "l3_agent",
+			HAState:            "active",
+			ResourceVersions:   map[string]any{},
+		},
+	}
+	th.CheckDeepEquals(t, expected, actual)
 }

@@ -1,13 +1,14 @@
 package testing
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"testing"
 
-	"github.com/gophercloud/gophercloud"
-	"github.com/gophercloud/gophercloud/openstack"
-	th "github.com/gophercloud/gophercloud/testhelper"
+	"github.com/gophercloud/gophercloud/v2"
+	"github.com/gophercloud/gophercloud/v2/openstack"
+	th "github.com/gophercloud/gophercloud/v2/testhelper"
 )
 
 const ID = "0123456789"
@@ -45,7 +46,7 @@ func TestAuthenticatedClientV3(t *testing.T) {
 		w.Header().Add("X-Subject-Token", ID)
 
 		w.WriteHeader(http.StatusCreated)
-		fmt.Fprintf(w, `{ "token": { "expires_at": "2013-02-02T18:30:59.000000Z" } }`)
+		fmt.Fprint(w, `{ "token": { "expires_at": "2013-02-02T18:30:59.000000Z" } }`)
 	})
 
 	options := gophercloud.AuthOptions{
@@ -55,7 +56,7 @@ func TestAuthenticatedClientV3(t *testing.T) {
 		TenantName:       "project",
 		IdentityEndpoint: th.Endpoint(),
 	}
-	client, err := openstack.AuthenticatedClient(options)
+	client, err := openstack.AuthenticatedClient(context.TODO(), options)
 	th.AssertNoErr(t, err)
 	th.CheckEquals(t, ID, client.TokenID)
 }
@@ -90,7 +91,7 @@ func TestAuthenticatedClientV2(t *testing.T) {
 	})
 
 	th.Mux.HandleFunc("/v2.0/tokens", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintf(w, `
+		fmt.Fprint(w, `
 			{
 				"access": {
 					"token": {
@@ -158,7 +159,7 @@ func TestAuthenticatedClientV2(t *testing.T) {
 		Password:         "secret",
 		IdentityEndpoint: th.Endpoint(),
 	}
-	client, err := openstack.AuthenticatedClient(options)
+	client, err := openstack.AuthenticatedClient(context.TODO(), options)
 	th.AssertNoErr(t, err)
 	th.CheckEquals(t, "01234567890", client.TokenID)
 }
@@ -196,7 +197,7 @@ func TestIdentityAdminV3Client(t *testing.T) {
 		w.Header().Add("X-Subject-Token", ID)
 
 		w.WriteHeader(http.StatusCreated)
-		fmt.Fprintf(w, `
+		fmt.Fprint(w, `
 	{
     "token": {
         "audit_ids": ["VcxU2JYqT8OzfUVvrjEITQ", "qNUTIJntTzO1-XUk5STybw"],
@@ -283,7 +284,7 @@ func TestIdentityAdminV3Client(t *testing.T) {
 		DomainID:         "12345",
 		IdentityEndpoint: th.Endpoint(),
 	}
-	pc, err := openstack.AuthenticatedClient(options)
+	pc, err := openstack.AuthenticatedClient(context.TODO(), options)
 	th.AssertNoErr(t, err)
 	sc, err := openstack.NewIdentityV3(pc, gophercloud.EndpointOpts{
 		Availability: gophercloud.AvailabilityAdmin,
@@ -300,7 +301,7 @@ func testAuthenticatedClientFails(t *testing.T, endpoint string) {
 		TenantName:       "project",
 		IdentityEndpoint: endpoint,
 	}
-	_, err := openstack.AuthenticatedClient(options)
+	_, err := openstack.AuthenticatedClient(context.TODO(), options)
 	if err == nil {
 		t.Fatal("expected error but call succeeded")
 	}

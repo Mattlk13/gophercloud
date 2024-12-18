@@ -1,8 +1,8 @@
 package sharetypes
 
 import (
-	"github.com/gophercloud/gophercloud"
-	"github.com/gophercloud/gophercloud/pagination"
+	"github.com/gophercloud/gophercloud/v2"
+	"github.com/gophercloud/gophercloud/v2/pagination"
 )
 
 // ShareType contains all the information associated with an OpenStack
@@ -15,9 +15,9 @@ type ShareType struct {
 	// Indicates whether a share type is publicly accessible
 	IsPublic bool `json:"os-share-type-access:is_public"`
 	// The required extra specifications for the share type
-	RequiredExtraSpecs map[string]interface{} `json:"required_extra_specs"`
+	RequiredExtraSpecs map[string]any `json:"required_extra_specs"`
 	// The extra specifications for the share type
-	ExtraSpecs map[string]interface{} `json:"extra_specs"`
+	ExtraSpecs map[string]any `json:"extra_specs"`
 }
 
 type commonResult struct {
@@ -31,40 +31,6 @@ func (r commonResult) Extract() (*ShareType, error) {
 	}
 	err := r.ExtractInto(&s)
 	return s.ShareType, err
-}
-
-// IDFromName is a convenience function that returns a share-type's ID given its name.
-func IDFromName(client *gophercloud.ServiceClient, name string) (string, error) {
-	r, err := List(client, &ListOpts{}).AllPages()
-	if err != nil {
-		return "", nil
-	}
-
-	ss, err := ExtractShareTypes(r)
-	if err != nil {
-		return "", err
-	}
-
-	var (
-		count int
-		id    string
-	)
-
-	for _, s := range ss {
-		if s.Name == name {
-			count++
-			id = s.ID
-		}
-	}
-
-	switch count {
-	case 0:
-		return "", gophercloud.ErrResourceNotFound{Name: name, ResourceType: "share type"}
-	case 1:
-		return id, nil
-	default:
-		return "", gophercloud.ErrMultipleResourcesFound{Name: name, Count: count, ResourceType: "share type"}
-	}
 }
 
 // CreateResult contains the response body and error from a Create request.
@@ -84,6 +50,10 @@ type ShareTypePage struct {
 
 // IsEmpty returns true if a ListResult contains no ShareTypes.
 func (r ShareTypePage) IsEmpty() (bool, error) {
+	if r.StatusCode == 204 {
+		return true, nil
+	}
+
 	shareTypes, err := ExtractShareTypes(r)
 	return len(shareTypes) == 0, err
 }
@@ -105,7 +75,7 @@ type GetDefaultResult struct {
 
 // ExtraSpecs contains all the information associated with extra specifications
 // for an Openstack ShareType.
-type ExtraSpecs map[string]interface{}
+type ExtraSpecs map[string]any
 
 type extraSpecsResult struct {
 	gophercloud.Result

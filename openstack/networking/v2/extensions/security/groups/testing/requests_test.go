@@ -1,15 +1,16 @@
 package testing
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"testing"
 	"time"
 
-	fake "github.com/gophercloud/gophercloud/openstack/networking/v2/common"
-	"github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/security/groups"
-	"github.com/gophercloud/gophercloud/pagination"
-	th "github.com/gophercloud/gophercloud/testhelper"
+	fake "github.com/gophercloud/gophercloud/v2/openstack/networking/v2/common"
+	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/extensions/security/groups"
+	"github.com/gophercloud/gophercloud/v2/pagination"
+	th "github.com/gophercloud/gophercloud/v2/testhelper"
 )
 
 func TestList(t *testing.T) {
@@ -23,12 +24,12 @@ func TestList(t *testing.T) {
 		w.Header().Add("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 
-		fmt.Fprintf(w, SecurityGroupListResponse)
+		fmt.Fprint(w, SecurityGroupListResponse)
 	})
 
 	count := 0
 
-	err := groups.List(fake.ServiceClient(), groups.ListOpts{}).EachPage(func(page pagination.Page) (bool, error) {
+	err := groups.List(fake.ServiceClient(), groups.ListOpts{}).EachPage(context.TODO(), func(_ context.Context, page pagination.Page) (bool, error) {
 		count++
 		actual, err := groups.ExtractGroups(page)
 		if err != nil {
@@ -63,11 +64,11 @@ func TestCreate(t *testing.T) {
 		w.Header().Add("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
 
-		fmt.Fprintf(w, SecurityGroupCreateResponse)
+		fmt.Fprint(w, SecurityGroupCreateResponse)
 	})
 
 	opts := groups.CreateOpts{Name: "new-webservers", Description: "security group for webservers"}
-	_, err := groups.Create(fake.ServiceClient(), opts).Extract()
+	_, err := groups.Create(context.TODO(), fake.ServiceClient(), opts).Extract()
 	th.AssertNoErr(t, err)
 }
 
@@ -86,11 +87,11 @@ func TestUpdate(t *testing.T) {
 			w.Header().Add("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
 
-			fmt.Fprintf(w, SecurityGroupUpdateResponse)
+			fmt.Fprint(w, SecurityGroupUpdateResponse)
 		})
 
 	opts := groups.UpdateOpts{Name: "newer-webservers"}
-	sg, err := groups.Update(fake.ServiceClient(), "2076db17-a522-4506-91de-c6dd8e837028", opts).Extract()
+	sg, err := groups.Update(context.TODO(), fake.ServiceClient(), "2076db17-a522-4506-91de-c6dd8e837028", opts).Extract()
 	th.AssertNoErr(t, err)
 
 	th.AssertEquals(t, "newer-webservers", sg.Name)
@@ -111,10 +112,10 @@ func TestGet(t *testing.T) {
 		w.Header().Add("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 
-		fmt.Fprintf(w, SecurityGroupGetResponse)
+		fmt.Fprint(w, SecurityGroupGetResponse)
 	})
 
-	sg, err := groups.Get(fake.ServiceClient(), "85cc3048-abc3-43cc-89b3-377341426ac5").Extract()
+	sg, err := groups.Get(context.TODO(), fake.ServiceClient(), "85cc3048-abc3-43cc-89b3-377341426ac5").Extract()
 	th.AssertNoErr(t, err)
 
 	th.AssertEquals(t, "default", sg.Description)
@@ -136,6 +137,6 @@ func TestDelete(t *testing.T) {
 		w.WriteHeader(http.StatusNoContent)
 	})
 
-	res := groups.Delete(fake.ServiceClient(), "4ec89087-d057-4e2c-911f-60a3b47ee304")
+	res := groups.Delete(context.TODO(), fake.ServiceClient(), "4ec89087-d057-4e2c-911f-60a3b47ee304")
 	th.AssertNoErr(t, res.Err)
 }

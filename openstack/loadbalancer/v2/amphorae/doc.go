@@ -8,7 +8,7 @@ Example to List Amphorae
 		LoadbalancerID: "6bd55cd3-802e-447e-a518-1e74e23bb106",
 	}
 
-	allPages, err := amphorae.List(octaviaClient, listOpts).AllPages()
+	allPages, err := amphorae.List(octaviaClient, listOpts).AllPages(context.TODO())
 	if err != nil {
 		panic(err)
 	}
@@ -20,6 +20,15 @@ Example to List Amphorae
 
 	for _, amphora := range allAmphorae {
 		fmt.Printf("%+v\n", amphora)
+	}
+
+Example to Failover an amphora
+
+	ampID := "d67d56a6-4a86-4688-a282-f46444705c64"
+
+	err := amphorae.Failover(context.TODO(), octaviaClient, ampID).ExtractErr()
+	if err != nil {
+		panic(err)
 	}
 */
 package amphorae

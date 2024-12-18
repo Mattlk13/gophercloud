@@ -1,8 +1,10 @@
 package addressscopes
 
 import (
-	"github.com/gophercloud/gophercloud"
-	"github.com/gophercloud/gophercloud/pagination"
+	"context"
+
+	"github.com/gophercloud/gophercloud/v2"
+	"github.com/gophercloud/gophercloud/v2/pagination"
 )
 
 // ListOptsBuilder allows extensions to add additional parameters to the
@@ -59,15 +61,16 @@ func List(c *gophercloud.ServiceClient, opts ListOptsBuilder) pagination.Pager {
 }
 
 // Get retrieves a specific address-scope based on its ID.
-func Get(c *gophercloud.ServiceClient, id string) (r GetResult) {
-	_, r.Err = c.Get(getURL(c, id), &r.Body, nil)
+func Get(ctx context.Context, c *gophercloud.ServiceClient, id string) (r GetResult) {
+	resp, err := c.Get(ctx, getURL(c, id), &r.Body, nil)
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
 	return
 }
 
 // CreateOptsBuilder allows to add additional parameters to the
 // Create request.
 type CreateOptsBuilder interface {
-	ToAddressScopeCreateMap() (map[string]interface{}, error)
+	ToAddressScopeCreateMap() (map[string]any, error)
 }
 
 // CreateOpts specifies parameters of a new address-scope.
@@ -89,27 +92,28 @@ type CreateOpts struct {
 }
 
 // ToAddressScopeCreateMap constructs a request body from CreateOpts.
-func (opts CreateOpts) ToAddressScopeCreateMap() (map[string]interface{}, error) {
+func (opts CreateOpts) ToAddressScopeCreateMap() (map[string]any, error) {
 	return gophercloud.BuildRequestBody(opts, "address_scope")
 }
 
 // Create requests the creation of a new address-scope on the server.
-func Create(client *gophercloud.ServiceClient, opts CreateOptsBuilder) (r CreateResult) {
+func Create(ctx context.Context, client *gophercloud.ServiceClient, opts CreateOptsBuilder) (r CreateResult) {
 	b, err := opts.ToAddressScopeCreateMap()
 	if err != nil {
 		r.Err = err
 		return
 	}
-	_, r.Err = client.Post(createURL(client), b, &r.Body, &gophercloud.RequestOpts{
+	resp, err := client.Post(ctx, createURL(client), b, &r.Body, &gophercloud.RequestOpts{
 		OkCodes: []int{201},
 	})
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
 	return
 }
 
 // UpdateOptsBuilder allows extensions to add additional parameters to the
 // Update request.
 type UpdateOptsBuilder interface {
-	ToAddressScopeUpdateMap() (map[string]interface{}, error)
+	ToAddressScopeUpdateMap() (map[string]any, error)
 }
 
 // UpdateOpts represents options used to update an address-scope.
@@ -122,26 +126,28 @@ type UpdateOpts struct {
 }
 
 // ToAddressScopeUpdateMap builds a request body from UpdateOpts.
-func (opts UpdateOpts) ToAddressScopeUpdateMap() (map[string]interface{}, error) {
+func (opts UpdateOpts) ToAddressScopeUpdateMap() (map[string]any, error) {
 	return gophercloud.BuildRequestBody(opts, "address_scope")
 }
 
 // Update accepts a UpdateOpts struct and updates an existing address-scope
 // using the values provided.
-func Update(c *gophercloud.ServiceClient, addressScopeID string, opts UpdateOptsBuilder) (r UpdateResult) {
+func Update(ctx context.Context, c *gophercloud.ServiceClient, addressScopeID string, opts UpdateOptsBuilder) (r UpdateResult) {
 	b, err := opts.ToAddressScopeUpdateMap()
 	if err != nil {
 		r.Err = err
 		return
 	}
-	_, r.Err = c.Put(updateURL(c, addressScopeID), b, &r.Body, &gophercloud.RequestOpts{
+	resp, err := c.Put(ctx, updateURL(c, addressScopeID), b, &r.Body, &gophercloud.RequestOpts{
 		OkCodes: []int{200},
 	})
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
 	return
 }
 
 // Delete accepts a unique ID and deletes the address-scope associated with it.
-func Delete(c *gophercloud.ServiceClient, id string) (r DeleteResult) {
-	_, r.Err = c.Delete(deleteURL(c, id), nil)
+func Delete(ctx context.Context, c *gophercloud.ServiceClient, id string) (r DeleteResult) {
+	resp, err := c.Delete(ctx, deleteURL(c, id), nil)
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
 	return
 }

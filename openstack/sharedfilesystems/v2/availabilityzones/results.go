@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/gophercloud/gophercloud"
-	"github.com/gophercloud/gophercloud/pagination"
+	"github.com/gophercloud/gophercloud/v2"
+	"github.com/gophercloud/gophercloud/v2/pagination"
 )
 
 // AvailabilityZone contains all the information associated with an OpenStack
@@ -19,10 +19,6 @@ type AvailabilityZone struct {
 	CreatedAt time.Time `json:"-"`
 	// The date and time stamp when the availability zone was updated.
 	UpdatedAt time.Time `json:"-"`
-}
-
-type commonResult struct {
-	gophercloud.Result
 }
 
 // ListResult contains the response body and error from a List request.

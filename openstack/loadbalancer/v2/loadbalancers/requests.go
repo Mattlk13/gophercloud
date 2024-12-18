@@ -1,8 +1,12 @@
 package loadbalancers
 
 import (
-	"github.com/gophercloud/gophercloud"
-	"github.com/gophercloud/gophercloud/pagination"
+	"context"
+
+	"github.com/gophercloud/gophercloud/v2"
+	"github.com/gophercloud/gophercloud/v2/openstack/loadbalancer/v2/listeners"
+	"github.com/gophercloud/gophercloud/v2/openstack/loadbalancer/v2/pools"
+	"github.com/gophercloud/gophercloud/v2/pagination"
 )
 
 // ListOptsBuilder allows extensions to add additional parameters to the
@@ -28,7 +32,8 @@ type ListOpts struct {
 	ID                 string   `q:"id"`
 	OperatingStatus    string   `q:"operating_status"`
 	Name               string   `q:"name"`
-	Flavor             string   `q:"flavor"`
+	FlavorID           string   `q:"flavor_id"`
+	AvailabilityZone   string   `q:"availability_zone"`
 	Provider           string   `q:"provider"`
 	Limit              int      `q:"limit"`
 	Marker             string   `q:"marker"`
@@ -69,7 +74,7 @@ func List(c *gophercloud.ServiceClient, opts ListOptsBuilder) pagination.Pager {
 // CreateOptsBuilder allows extensions to add additional parameters to the
 // Create request.
 type CreateOptsBuilder interface {
-	ToLoadBalancerCreateMap() (map[string]interface{}, error)
+	ToLoadBalancerCreateMap() (map[string]any, error)
 }
 
 // CreateOpts is the common options struct used in this package's Create
@@ -104,22 +109,47 @@ type CreateOpts struct {
 	// The IP address of the Loadbalancer.
 	VipAddress string `json:"vip_address,omitempty"`
 
+	// The ID of the QoS Policy which will apply to the Virtual IP
+	VipQosPolicyID string `json:"vip_qos_policy_id,omitempty"`
+
 	// The administrative state of the Loadbalancer. A valid value is true (UP)
 	// or false (DOWN).
 	AdminStateUp *bool `json:"admin_state_up,omitempty"`
 
 	// The UUID of a flavor.
-	Flavor string `json:"flavor,omitempty"`
+	FlavorID string `json:"flavor_id,omitempty"`
+
+	// The name of an Octavia availability zone.
+	// Requires Octavia API version 2.14 or later.
+	AvailabilityZone string `json:"availability_zone,omitempty"`
 
 	// The name of the provider.
 	Provider string `json:"provider,omitempty"`
 
+	// Listeners is a slice of listeners.CreateOpts which allows a set
+	// of listeners to be created at the same time the Loadbalancer is created.
+	//
+	// This is only possible to use when creating a fully populated
+	// load balancer.
+	Listeners []listeners.CreateOpts `json:"listeners,omitempty"`
+
+	// Pools is a slice of pools.CreateOpts which allows a set of pools
+	// to be created at the same time the Loadbalancer is created.
+	//
+	// This is only possible to use when creating a fully populated
+	// load balancer.
+	Pools []pools.CreateOpts `json:"pools,omitempty"`
+
 	// Tags is a set of resource tags.
 	Tags []string `json:"tags,omitempty"`
+
+	// The additional ips of the loadbalancer. Subnets must all belong to the same network as the primary VIP.
+	// New in version 2.26
+	AdditionalVips []AdditionalVip `json:"additional_vips,omitempty"`
 }
 
 // ToLoadBalancerCreateMap builds a request body from CreateOpts.
-func (opts CreateOpts) ToLoadBalancerCreateMap() (map[string]interface{}, error) {
+func (opts CreateOpts) ToLoadBalancerCreateMap() (map[string]any, error) {
 	return gophercloud.BuildRequestBody(opts, "loadbalancer")
 }
 
@@ -127,26 +157,28 @@ func (opts CreateOpts) ToLoadBalancerCreateMap() (map[string]interface{}, error)
 // configuration defined in the CreateOpts struct. Once the request is
 // validated and progress has started on the provisioning process, a
 // CreateResult will be returned.
-func Create(c *gophercloud.ServiceClient, opts CreateOptsBuilder) (r CreateResult) {
+func Create(ctx context.Context, c *gophercloud.ServiceClient, opts CreateOptsBuilder) (r CreateResult) {
 	b, err := opts.ToLoadBalancerCreateMap()
 	if err != nil {
 		r.Err = err
 		return
 	}
-	_, r.Err = c.Post(rootURL(c), b, &r.Body, nil)
+	resp, err := c.Post(ctx, rootURL(c), b, &r.Body, nil)
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
 	return
 }
 
 // Get retrieves a particular Loadbalancer based on its unique ID.
-func Get(c *gophercloud.ServiceClient, id string) (r GetResult) {
-	_, r.Err = c.Get(resourceURL(c, id), &r.Body, nil)
+func Get(ctx context.Context, c *gophercloud.ServiceClient, id string) (r GetResult) {
+	resp, err := c.Get(ctx, resourceURL(c, id), &r.Body, nil)
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
 	return
 }
 
 // UpdateOptsBuilder allows extensions to add additional parameters to the
 // Update request.
 type UpdateOptsBuilder interface {
-	ToLoadBalancerUpdateMap() (map[string]interface{}, error)
+	ToLoadBalancerUpdateMap() (map[string]any, error)
 }
 
 // UpdateOpts is the common options struct used in this package's Update
@@ -162,26 +194,30 @@ type UpdateOpts struct {
 	// or false (DOWN).
 	AdminStateUp *bool `json:"admin_state_up,omitempty"`
 
+	// The ID of the QoS Policy which will apply to the Virtual IP
+	VipQosPolicyID *string `json:"vip_qos_policy_id,omitempty"`
+
 	// Tags is a set of resource tags.
 	Tags *[]string `json:"tags,omitempty"`
 }
 
 // ToLoadBalancerUpdateMap builds a request body from UpdateOpts.
-func (opts UpdateOpts) ToLoadBalancerUpdateMap() (map[string]interface{}, error) {
+func (opts UpdateOpts) ToLoadBalancerUpdateMap() (map[string]any, error) {
 	return gophercloud.BuildRequestBody(opts, "loadbalancer")
 }
 
 // Update is an operation which modifies the attributes of the specified
 // LoadBalancer.
-func Update(c *gophercloud.ServiceClient, id string, opts UpdateOpts) (r UpdateResult) {
+func Update(ctx context.Context, c *gophercloud.ServiceClient, id string, opts UpdateOpts) (r UpdateResult) {
 	b, err := opts.ToLoadBalancerUpdateMap()
 	if err != nil {
 		r.Err = err
 		return
 	}
-	_, r.Err = c.Put(resourceURL(c, id), b, &r.Body, &gophercloud.RequestOpts{
+	resp, err := c.Put(ctx, resourceURL(c, id), b, &r.Body, &gophercloud.RequestOpts{
 		OkCodes: []int{200, 202},
 	})
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
 	return
 }
 
@@ -206,7 +242,7 @@ func (opts DeleteOpts) ToLoadBalancerDeleteQuery() (string, error) {
 
 // Delete will permanently delete a particular LoadBalancer based on its
 // unique ID.
-func Delete(c *gophercloud.ServiceClient, id string, opts DeleteOptsBuilder) (r DeleteResult) {
+func Delete(ctx context.Context, c *gophercloud.ServiceClient, id string, opts DeleteOptsBuilder) (r DeleteResult) {
 	url := resourceURL(c, id)
 	if opts != nil {
 		query, err := opts.ToLoadBalancerDeleteQuery()
@@ -216,26 +252,30 @@ func Delete(c *gophercloud.ServiceClient, id string, opts DeleteOptsBuilder) (r 
 		}
 		url += query
 	}
-	_, r.Err = c.Delete(url, nil)
+	resp, err := c.Delete(ctx, url, nil)
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
 	return
 }
 
 // GetStatuses will return the status of a particular LoadBalancer.
-func GetStatuses(c *gophercloud.ServiceClient, id string) (r GetStatusesResult) {
-	_, r.Err = c.Get(statusRootURL(c, id), &r.Body, nil)
+func GetStatuses(ctx context.Context, c *gophercloud.ServiceClient, id string) (r GetStatusesResult) {
+	resp, err := c.Get(ctx, statusRootURL(c, id), &r.Body, nil)
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
 	return
 }
 
 // GetStats will return the shows the current statistics of a particular LoadBalancer.
-func GetStats(c *gophercloud.ServiceClient, id string) (r StatsResult) {
-	_, r.Err = c.Get(statisticsRootURL(c, id), &r.Body, nil)
+func GetStats(ctx context.Context, c *gophercloud.ServiceClient, id string) (r StatsResult) {
+	resp, err := c.Get(ctx, statisticsRootURL(c, id), &r.Body, nil)
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
 	return
 }
 
 // Failover performs a failover of a load balancer.
-func Failover(c *gophercloud.ServiceClient, id string) (r FailoverResult) {
-	_, r.Err = c.Put(failoverRootURL(c, id), nil, nil, &gophercloud.RequestOpts{
+func Failover(ctx context.Context, c *gophercloud.ServiceClient, id string) (r FailoverResult) {
+	resp, err := c.Put(ctx, failoverRootURL(c, id), nil, nil, &gophercloud.RequestOpts{
 		OkCodes: []int{202},
 	})
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
 	return
 }

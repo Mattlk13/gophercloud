@@ -4,9 +4,11 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/gophercloud/gophercloud"
-	"github.com/gophercloud/gophercloud/openstack/networking/v2/networks"
-	"github.com/gophercloud/gophercloud/pagination"
+	"github.com/gophercloud/gophercloud/v2"
+	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/extensions/bgp/speakers"
+	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/extensions/layer3/routers"
+	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/networks"
+	"github.com/gophercloud/gophercloud/v2/pagination"
 )
 
 type commonResult struct {
@@ -28,6 +30,46 @@ type GetResult struct {
 	commonResult
 }
 
+// UpdateResult represents the result of a get operation. Call its Extract
+// method to interpret it as an Agent.
+type UpdateResult struct {
+	commonResult
+}
+
+// DeleteResult represents the result of a delete operation. Call its
+// ExtractErr method to determine if the request succeeded or failed.
+type DeleteResult struct {
+	gophercloud.ErrResult
+}
+
+// ScheduleDHCPNetworkResult represents the result of a schedule a network to
+// a DHCP agent operation. ExtractErr method to determine if the request
+// succeeded or failed.
+type ScheduleDHCPNetworkResult struct {
+	gophercloud.ErrResult
+}
+
+// RemoveDHCPNetworkResult represents the result of a remove a network from a
+// DHCP agent operation. ExtractErr method to determine if the request succeeded
+// or failed.
+type RemoveDHCPNetworkResult struct {
+	gophercloud.ErrResult
+}
+
+// ScheduleBGPSpeakerResult represents the result of adding a BGP speaker to a
+// BGP DR Agent. ExtractErr method to determine if the request succeeded or
+// failed.
+type ScheduleBGPSpeakerResult struct {
+	gophercloud.ErrResult
+}
+
+// RemoveBGPSpeakerResult represents the result of removing a BGP speaker from a
+// BGP DR Agent. ExtractErr method to determine if the request succeeded or
+// failed.
+type RemoveBGPSpeakerResult struct {
+	gophercloud.ErrResult
+}
+
 // Agent represents a Neutron agent.
 type Agent struct {
 	// ID is the id of the agent.
@@ -42,6 +84,10 @@ type Agent struct {
 	// Alive indicates whether agent is alive or not.
 	Alive bool `json:"alive"`
 
+	// ResourcesSynced indicates whether agent is synced or not.
+	// Not all agent types track resources via Placement.
+	ResourcesSynced bool `json:"resources_synced"`
+
 	// AvailabilityZone is a zone of the agent.
 	AvailabilityZone string `json:"availability_zone"`
 
@@ -50,7 +96,7 @@ type Agent struct {
 
 	// Configurations is a configuration specific key/value pairs that are
 	// determined by the agent binary and type.
-	Configurations map[string]interface{} `json:"configurations"`
+	Configurations map[string]any `json:"configurations"`
 
 	// CreatedAt is a creation timestamp.
 	CreatedAt time.Time `json:"-"`
@@ -114,6 +160,10 @@ func (r AgentPage) NextPageURL() (string, error) {
 
 // IsEmpty determines whether or not a AgentPage is empty.
 func (r AgentPage) IsEmpty() (bool, error) {
+	if r.StatusCode == 204 {
+		return true, nil
+	}
+
 	agents, err := ExtractAgents(r)
 	return len(agents) == 0, err
 }
@@ -142,4 +192,58 @@ func (r ListDHCPNetworksResult) Extract() ([]networks.Network, error) {
 
 	err := r.ExtractInto(&s)
 	return s.Networks, err
+}
+
+// ListBGPSpeakersResult is the respone of agents/{id}/bgp-speakers
+type ListBGPSpeakersResult struct {
+	pagination.SinglePageBase
+}
+
+func (r ListBGPSpeakersResult) IsEmpty() (bool, error) {
+	if r.StatusCode == 204 {
+		return true, nil
+	}
+
+	speakers, err := ExtractBGPSpeakers(r)
+	return 0 == len(speakers), err
+}
+
+// ExtractBGPSpeakers inteprets the ListBGPSpeakersResult into an array of BGP speakers
+func ExtractBGPSpeakers(r pagination.Page) ([]speakers.BGPSpeaker, error) {
+	var s struct {
+		Speakers []speakers.BGPSpeaker `json:"bgp_speakers"`
+	}
+
+	err := (r.(ListBGPSpeakersResult)).ExtractInto(&s)
+	return s.Speakers, err
+}
+
+// ListL3RoutersResult is the response from a List operation.
+// Call its Extract method to interpret it as routers.
+type ListL3RoutersResult struct {
+	gophercloud.Result
+}
+
+// ScheduleL3RouterResult represents the result of a schedule a router to
+// a L3 agent operation. ExtractErr method to determine if the request
+// succeeded or failed.
+type ScheduleL3RouterResult struct {
+	gophercloud.ErrResult
+}
+
+// RemoveL3RouterResult represents the result of a remove a router from a
+// L3 agent operation. ExtractErr method to determine if the request succeeded
+// or failed.
+type RemoveL3RouterResult struct {
+	gophercloud.ErrResult
+}
+
+// Extract interprets any ListL3RoutesResult as an array of routers.
+func (r ListL3RoutersResult) Extract() ([]routers.Router, error) {
+	var s struct {
+		Routers []routers.Router `json:"routers"`
+	}
+
+	err := r.ExtractInto(&s)
+	return s.Routers, err
 }

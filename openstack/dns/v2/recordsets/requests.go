@@ -1,8 +1,10 @@
 package recordsets
 
 import (
-	"github.com/gophercloud/gophercloud"
-	"github.com/gophercloud/gophercloud/pagination"
+	"context"
+
+	"github.com/gophercloud/gophercloud/v2"
+	"github.com/gophercloud/gophercloud/v2/pagination"
 )
 
 // ListOptsBuilder allows extensions to add additional parameters to the
@@ -56,15 +58,16 @@ func ListByZone(client *gophercloud.ServiceClient, zoneID string, opts ListOptsB
 }
 
 // Get implements the recordset Get request.
-func Get(client *gophercloud.ServiceClient, zoneID string, rrsetID string) (r GetResult) {
-	_, r.Err = client.Get(rrsetURL(client, zoneID, rrsetID), &r.Body, nil)
+func Get(ctx context.Context, client *gophercloud.ServiceClient, zoneID string, rrsetID string) (r GetResult) {
+	resp, err := client.Get(ctx, rrsetURL(client, zoneID, rrsetID), &r.Body, nil)
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
 	return
 }
 
 // CreateOptsBuilder allows extensions to add additional attributes to the
 // Create request.
 type CreateOptsBuilder interface {
-	ToRecordSetCreateMap() (map[string]interface{}, error)
+	ToRecordSetCreateMap() (map[string]any, error)
 }
 
 // CreateOpts specifies the base attributes that may be used to create a
@@ -87,7 +90,7 @@ type CreateOpts struct {
 }
 
 // ToRecordSetCreateMap formats an CreateOpts structure into a request body.
-func (opts CreateOpts) ToRecordSetCreateMap() (map[string]interface{}, error) {
+func (opts CreateOpts) ToRecordSetCreateMap() (map[string]any, error) {
 	b, err := gophercloud.BuildRequestBody(opts, "")
 	if err != nil {
 		return nil, err
@@ -97,22 +100,23 @@ func (opts CreateOpts) ToRecordSetCreateMap() (map[string]interface{}, error) {
 }
 
 // Create creates a recordset in a given zone.
-func Create(client *gophercloud.ServiceClient, zoneID string, opts CreateOptsBuilder) (r CreateResult) {
+func Create(ctx context.Context, client *gophercloud.ServiceClient, zoneID string, opts CreateOptsBuilder) (r CreateResult) {
 	b, err := opts.ToRecordSetCreateMap()
 	if err != nil {
 		r.Err = err
 		return
 	}
-	_, r.Err = client.Post(baseURL(client, zoneID), &b, &r.Body, &gophercloud.RequestOpts{
+	resp, err := client.Post(ctx, baseURL(client, zoneID), &b, &r.Body, &gophercloud.RequestOpts{
 		OkCodes: []int{201, 202},
 	})
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
 	return
 }
 
 // UpdateOptsBuilder allows extensions to add additional attributes to the
 // Update request.
 type UpdateOptsBuilder interface {
-	ToRecordSetUpdateMap() (map[string]interface{}, error)
+	ToRecordSetUpdateMap() (map[string]any, error)
 }
 
 // UpdateOpts specifies the base attributes that may be updated on an existing
@@ -129,7 +133,7 @@ type UpdateOpts struct {
 }
 
 // ToRecordSetUpdateMap formats an UpdateOpts structure into a request body.
-func (opts UpdateOpts) ToRecordSetUpdateMap() (map[string]interface{}, error) {
+func (opts UpdateOpts) ToRecordSetUpdateMap() (map[string]any, error) {
 	b, err := gophercloud.BuildRequestBody(opts, "")
 	if err != nil {
 		return nil, err
@@ -152,22 +156,24 @@ func (opts UpdateOpts) ToRecordSetUpdateMap() (map[string]interface{}, error) {
 }
 
 // Update updates a recordset in a given zone
-func Update(client *gophercloud.ServiceClient, zoneID string, rrsetID string, opts UpdateOptsBuilder) (r UpdateResult) {
+func Update(ctx context.Context, client *gophercloud.ServiceClient, zoneID string, rrsetID string, opts UpdateOptsBuilder) (r UpdateResult) {
 	b, err := opts.ToRecordSetUpdateMap()
 	if err != nil {
 		r.Err = err
 		return
 	}
-	_, r.Err = client.Put(rrsetURL(client, zoneID, rrsetID), &b, &r.Body, &gophercloud.RequestOpts{
+	resp, err := client.Put(ctx, rrsetURL(client, zoneID, rrsetID), &b, &r.Body, &gophercloud.RequestOpts{
 		OkCodes: []int{200, 202},
 	})
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
 	return
 }
 
 // Delete removes an existing RecordSet.
-func Delete(client *gophercloud.ServiceClient, zoneID string, rrsetID string) (r DeleteResult) {
-	_, r.Err = client.Delete(rrsetURL(client, zoneID, rrsetID), &gophercloud.RequestOpts{
+func Delete(ctx context.Context, client *gophercloud.ServiceClient, zoneID string, rrsetID string) (r DeleteResult) {
+	resp, err := client.Delete(ctx, rrsetURL(client, zoneID, rrsetID), &gophercloud.RequestOpts{
 		OkCodes: []int{202},
 	})
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
 	return
 }

@@ -6,8 +6,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/gophercloud/gophercloud"
-	"github.com/gophercloud/gophercloud/pagination"
+	"github.com/gophercloud/gophercloud/v2"
+	"github.com/gophercloud/gophercloud/v2/pagination"
 )
 
 const (
@@ -139,6 +139,10 @@ func (r SnapshotPage) LastMarker() (string, error) {
 
 // IsEmpty satisifies the IsEmpty method of the Page interface
 func (r SnapshotPage) IsEmpty() (bool, error) {
+	if r.StatusCode == 204 {
+		return true, nil
+	}
+
 	snapshots, err := ExtractSnapshots(r)
 	return len(snapshots) == 0, err
 }
@@ -170,24 +174,12 @@ type UpdateResult struct {
 	commonResult
 }
 
-// IDFromName is a convenience function that returns a snapshot's ID given its name.
-func IDFromName(client *gophercloud.ServiceClient, name string) (string, error) {
-	r, err := ListDetail(client, &ListOpts{Name: name}).AllPages()
-	if err != nil {
-		return "", err
-	}
+// ResetStatusResult contains the response error from an ResetStatus request.
+type ResetStatusResult struct {
+	gophercloud.ErrResult
+}
 
-	ss, err := ExtractSnapshots(r)
-	if err != nil {
-		return "", err
-	}
-
-	switch len(ss) {
-	case 0:
-		return "", gophercloud.ErrResourceNotFound{Name: name, ResourceType: "snapshot"}
-	case 1:
-		return ss[0].ID, nil
-	default:
-		return "", gophercloud.ErrMultipleResourcesFound{Name: name, Count: len(ss), ResourceType: "snapshot"}
-	}
+// ForceDeleteResult contains the response error from an ForceDelete request.
+type ForceDeleteResult struct {
+	gophercloud.ErrResult
 }
